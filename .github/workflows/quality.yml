@@ -19,7 +19,7 @@ jobs:
           python-version: "3.13"
       - name: Compile Python sources
         run: python -m compileall -q app cloudflare
-      - name: Validate D1 schema with SQLite
+      - name: Run skill routing tests\n        run: python -m unittest discover -s tests -v\n      - name: Validate D1 schema with SQLite
         run: |
           python - <<'PY'
           import sqlite3
