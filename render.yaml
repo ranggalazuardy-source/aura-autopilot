@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: aura-autopilot-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./aura.db
+      - key: CORS_ORIGINS
+        value: http://localhost:3000
