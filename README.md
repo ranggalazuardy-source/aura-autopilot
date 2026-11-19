@@ -126,3 +126,15 @@ All private endpoints require the `X-AURA-API-Key` header. Interactive API docum
 - Account and credential security policy: `security/ACCOUNT_SECURITY.md`
 
 These documents are preparation only. They do not mean any Google, YouTube, TikTok, Instagram, domain or affiliate account has been created or verified. The owner must create accounts under their own identity, control recovery methods and approve OAuth consent. Suggested handles are unverified until checked directly on each platform.
+
+
+## Mas Mas Wibu content operations (v0.4.0)
+
+The dashboard now includes a guarded Content tab and D1-backed content queue:
+- Create content ideas with platform, format, pillar, hook, script/notes and rights status.
+- Move ideas through idea → draft → in_review.
+- Approval is blocked unless rights_status is `cleared`.
+- Status `approved` is an internal approval only; no video is uploaded or scheduled.
+- Initial Mas Mas Wibu starter backlog is seeded by `cloudflare/schema.sql` (14 YouTube Shorts ideas).
+
+After applying the updated schema to D1, the Content tab and API become available. Re-run the full schema safely; table/index creation and seed inserts are idempotent. The new content queue does not connect YouTube OAuth and does not publish content.
