@@ -5,7 +5,8 @@
 The Cloudflare Worker now bundles a deterministic skill catalogue and agent-to-pack bindings. The D1 `task_skill_routes` table records which pack IDs are assigned to each task.
 
 - `GET /skills` lists the four available skill packs and their repository source paths.
-- `GET /agents/{agent_name}/skills` lists the packs bound to a registered agent.
+- `GET /agents/{agent_name}/skills` lists packs for simple agent names.
+- `GET /agent-skills?agent=...` supports all registry names, including names containing slashes such as `E-commerce / Dropship`.
 - `POST /agent-tasks` creates a queued task and records its skill routing immediately.
 - `POST /agent-tasks/{task_id}/route` re-applies the current registry binding to an existing task.
 - `GET /agent-tasks` includes the comma-separated `skill_pack_ids` for each task.
