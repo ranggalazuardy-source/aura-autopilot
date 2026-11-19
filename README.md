@@ -117,3 +117,12 @@ All private endpoints require the `X-AURA-API-Key` header. Interactive API docum
 - An approved record does not execute the action; a separate, explicitly authorized integration would be required.
 - Confirmed income means a user-recorded ledger entry, not a verified bank settlement.
 - No paid infrastructure or expenditure is authorized by this repository.
+
+
+## Brand and account onboarding
+- Brand identity and naming guide: `brand/IDENTITY.md`
+- Owner-controlled account setup checklist: `ACCOUNT_SETUP.md`
+- Least-privilege provider integration plan: `integrations/OAUTH_PLAN.md`
+- Account and credential security policy: `security/ACCOUNT_SECURITY.md`
+
+These documents are preparation only. They do not mean any Google, YouTube, TikTok, Instagram, domain or affiliate account has been created or verified. The owner must create accounts under their own identity, control recovery methods and approve OAuth consent. Suggested handles are unverified until checked directly on each platform.
