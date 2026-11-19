@@ -15,8 +15,8 @@ This file is an onboarding register, not proof that accounts exist. All entries 
 
 | Platform | Intended use | Suggested public handle | Initial state | Owner action |
 |---|---|---|---|---|
-| Google Account | Workspace identity, OAuth owner, Analytics/Search Console | `aura.operations` (availability unverified) | NOT CREATED | Owner creates Google account and secures recovery |
-| YouTube | Brand channel and video publishing | `AURA Operations` | BLOCKED BY GOOGLE | Create channel under owner-controlled Google account |
+| Google Account | Workspace identity, OAuth owner, Analytics/Search Console | Owner-confirmed account (email shared in chat; intentionally not copied into repository) | CREATED — owner confirmed | Owner controls recovery and 2-step verification |
+| YouTube | Brand channel and video publishing | `AURA Operations` | GOOGLE LOGIN AVAILABLE — channel existence/brand setup not yet verified | Sign in using the same owner-controlled Google account; confirm or create the channel |
 | TikTok | Short-form distribution | `@aura.operations` (availability unverified) | NOT CREATED | Owner creates account and completes required verification |
 | Instagram | Brand presence and Meta app connection | `@aura.operations` (availability unverified) | NOT CREATED | Owner creates account; switch to professional if eligible |
 | Website | Official landing page and owned content | Domain not selected | NOT CREATED | Owner chooses a domain only after checking price/renewal; no purchase without approval |
@@ -45,5 +45,11 @@ This file is an onboarding register, not proof that accounts exist. All entries 
 | Domain registrar recovery | Owner password manager | No |
 | OAuth app credentials | Cloudflare secrets only | No |
 
-## Current state
-No new third-party accounts have been created by this repository change. No credentials are stored here. Account creation, phone/email verification and acceptance of platform terms must be completed by the owner.
+## Current state (owner-confirmed update)
+- Google account: owner confirms it has been created.
+- YouTube sign-in: owner confirms YouTube uses the same Google login.
+- YouTube channel/Brand Account configuration and channel permissions: not yet independently verified.
+- TikTok, Instagram, website and affiliate accounts: still unconfirmed.
+- No credentials or personal email address are stored in this repository.
+
+No account was created by this repository change. Account verification, channel setup and acceptance of platform terms remain owner-controlled.
