@@ -1,0 +1,100 @@
+version: 1
+upstream:
+  repository: https://github.com/VoltAgent/awesome-agent-skills
+  branch: main
+  license_file: https://github.com/VoltAgent/awesome-agent-skills/blob/main/LICENSE
+  adoption: curated_references_and_original_aura_playbooks
+  upstream_skill_count_observed: "1497+"
+  last_reviewed: "2026-11-20"
+packs:
+  market-intelligence:
+    file: skills/market-intelligence.md
+    agents: [CEO Orchestrator, Market Intelligence]
+    upstream:
+      - id: deanpeters/company-research
+        url: https://officialskills.sh/deanpeters/skills/company-research
+      - id: deanpeters/jobs-to-be-done
+        url: https://officialskills.sh/deanpeters/skills/jobs-to-be-done
+      - id: deanpeters/pestel-analysis
+        url: https://officialskills.sh/deanpeters/skills/pestel-analysis
+      - id: deanpeters/opportunity-solution-tree
+        url: https://officialskills.sh/deanpeters/skills/opportunity-solution-tree
+      - id: deanpeters/prioritization-advisor
+        url: https://officialskills.sh/deanpeters/skills/prioritization-advisor
+      - id: serpapi/serpapi-web-search
+        url: https://officialskills.sh/serpapi/skills/serpapi-web-search
+      - id: brave/web-search
+        url: https://officialskills.sh/brave/skills/web-search
+  growth-content-commerce:
+    file: skills/growth-content-commerce.md
+    agents: [Content & Media, Clipping Studio, Affiliate Commerce, E-commerce / Dropship, Service Sales, Digital Products, SEO / Website]
+    upstream:
+      - id: coreyhaines31/content-strategy
+        url: https://officialskills.sh/coreyhaines31/skills/content-strategy
+      - id: coreyhaines31/copywriting
+        url: https://officialskills.sh/coreyhaines31/skills/copywriting
+      - id: coreyhaines31/seo-audit
+        url: https://officialskills.sh/coreyhaines31/skills/seo-audit
+      - id: coreyhaines31/analytics
+        url: https://officialskills.sh/coreyhaines31/skills/analytics
+      - id: coreyhaines31/cro
+        url: https://officialskills.sh/coreyhaines31/skills/cro
+      - id: coreyhaines31/referrals
+        url: https://officialskills.sh/coreyhaines31/skills/referrals
+      - id: coreyhaines31/sales-enablement
+        url: https://officialskills.sh/coreyhaines31/skills/sales-enablement
+      - id: realkimbarrett/offer-extraction
+        url: https://officialskills.sh/realkimbarrett/skills/offer-extraction
+      - id: realkimbarrett/scroll-stopping-creative
+        url: https://officialskills.sh/realkimbarrett/skills/scroll-stopping-creative
+      - id: realkimbarrett/conversion-path-builder
+        url: https://officialskills.sh/realkimbarrett/skills/conversion-path-builder
+      - id: realkimbarrett/generic-language-killer
+        url: https://officialskills.sh/realkimbarrett/skills/generic-language-killer
+      - id: remotion-dev/remotion
+        url: https://officialskills.sh/remotion-dev/skills/remotion
+  finance-investment-risk:
+    file: skills/finance-investment-risk.md
+    agents: [Finance & Treasury, Equity Research, Crypto Research, Trading Risk Manager]
+    upstream:
+      - id: deanpeters/finance-metrics-quickref
+        url: https://officialskills.sh/deanpeters/skills/finance-metrics-quickref
+      - id: deanpeters/saas-economics-efficiency-metrics
+        url: https://officialskills.sh/deanpeters/skills/saas-economics-efficiency-metrics
+      - id: binance/crypto-market-rank
+        url: https://officialskills.sh/binance/skills/crypto-market-rank
+      - id: binance/query-token-audit
+        url: https://officialskills.sh/binance/skills/query-token-audit
+      - id: binance/query-token-info
+        url: https://officialskills.sh/binance/skills/query-token-info
+      - id: binance/trading-signal
+        url: https://officialskills.sh/binance/skills/trading-signal
+      - id: binance/spot
+        url: https://officialskills.sh/binance/skills/spot
+        aura_status: blocked_live_execution
+      - id: coinbase/query-onchain-data
+        url: https://officialskills.sh/coinbase/skills/query-onchain-data
+  platform-engineering-security:
+    file: skills/platform-engineering-security.md
+    agents: [CEO Orchestrator, QA / Auditor]
+    upstream:
+      - id: voltagent/voltagent-best-practices
+        url: https://officialskills.sh/voltagent/skills/voltagent-best-practices
+      - id: cloudflare/agents-sdk
+        url: https://officialskills.sh/cloudflare/skills/agents-sdk
+      - id: cloudflare/workers-best-practices
+        url: https://officialskills.sh/cloudflare/skills/workers-best-practices
+      - id: cloudflare/wrangler
+        url: https://officialskills.sh/cloudflare/skills/wrangler
+      - id: openai/security-best-practices
+        url: https://officialskills.sh/openai/skills/security-best-practices
+      - id: openai/security-threat-model
+        url: https://officialskills.sh/openai/skills/security-threat-model
+      - id: trailofbits/static-analysis
+        url: https://officialskills.sh/trailofbits/skills/static-analysis
+      - id: trailofbits/insecure-defaults
+        url: https://officialskills.sh/trailofbits/skills/insecure-defaults
+      - id: testmu-ai/playwright-skill
+        url: https://github.com/LambdaTest/agent-skills/tree/main/playwright-skill
+      - id: openai/gh-fix-ci
+        url: https://officialskills.sh/openai/skills/gh-fix-ci
