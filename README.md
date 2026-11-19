@@ -138,3 +138,15 @@ The dashboard now includes a guarded Content tab and D1-backed content queue:
 - Initial Mas Mas Wibu starter backlog is seeded by `cloudflare/schema.sql` (14 YouTube Shorts ideas).
 
 After applying the updated schema to D1, the Content tab and API become available. Re-run the full schema safely; table/index creation and seed inserts are idempotent. The new content queue does not connect YouTube OAuth and does not publish content.
+
+
+## Multi-agent task orchestration (v0.5.0)
+
+AURA now has a persistent agent task queue:
+- `POST /agent-tasks` creates a queued task for a named agent.
+- `GET /agent-tasks` lists queued and historical tasks.
+- `POST /agent-tasks/{id}/status` records a status and result summary.
+- The schema seeds initial work items for the 15 defined agent roles.
+- `GET /config` reports the owner-approved zero-capital, moderate-risk, 50/50 monthly distribution defaults.
+
+This is a task registry and orchestration foundation, not an autonomous runtime. No agents are running in the background, no external market scans are scheduled, and no integrations or financial transactions are active. Seeded tasks are queued plans, not completed work. Applying the updated D1 schema is required before these endpoints work in production.
