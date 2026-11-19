@@ -395,8 +395,8 @@ AGENT_SKILLS = {
     "Crypto Research": ["finance-investment-risk"],
     "Trading Risk Manager": ["finance-investment-risk"],
     "Finance & Treasury": ["finance-investment-risk"],
-    "Compliance & Rights": list(SKILL_PACKS.keys()),
-    "QA / Auditor": list(SKILL_PACKS.keys()),
+    "Compliance & Rights": ["market-intelligence", "growth-content-commerce", "finance-investment-risk", "platform-engineering-security"],
+    "QA / Auditor": ["market-intelligence", "growth-content-commerce", "finance-investment-risk", "platform-engineering-security"],
 }
 
 
