@@ -84,6 +84,17 @@ class ContentItemIn(BaseModel):
 class ContentStatusIn(BaseModel):
     status: str = Field(pattern="^(idea|draft|in_review|approved|published|paused)$")
 
+class AgentTaskIn(BaseModel):
+    agent: str = Field(min_length=2, max_length=80)
+    objective: str = Field(min_length=5, max_length=2000)
+    priority: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
+    related_opportunity_id: str = Field(default="", max_length=64)
+
+class AgentTaskStatusIn(BaseModel):
+    status: str = Field(pattern="^(queued|in_progress|blocked|completed|cancelled)$")
+    result_summary: str = Field(default="", max_length=3000)
+
+
 
 DASHBOARD = r"""
 <!doctype html>
@@ -190,11 +201,15 @@ async def health():
 @app.get("/config")
 async def config():
     return {
-        "mode": "full_opportunity_discovery",
-        "budget": "flexible_with_explicit_spend_approval",
-        "assets": ["youtube", "tiktok", "google", "website", "instagram", "marketplace_affiliate"],
+        "mode": "multi_agent_revenue_operations",
+        "initial_capital_idr": 0,
+        "risk_profile": "moderate",
+        "distribution": {"owner_percent": 50, "reinvestment_percent": 50, "frequency": "monthly", "closing_day": 1},
+        "spending_requires_owner_approval": True,
+        "financial_transactions_require_owner_approval": True,
+        "assets": ["youtube", "tiktok", "google", "website", "instagram", "affiliate", "ecommerce", "services", "equities_research", "crypto_research"],
         "autonomy": "guarded",
-        "goal": "diversified_revenue",
+        "goal": "diversified_net_revenue",
         "live_integrations": [],
         "dashboard_available": True,
         "production_ready": False,
@@ -340,6 +355,39 @@ async def update_content_status(content_id: str, payload: ContentStatusIn, db=De
     ).run()
     await write_audit(db, "content.status_changed", content_id, payload.status)
     return {"id": content_id, "status": payload.status, "publishing": "not_automated"}
+
+@app.post("/agent-tasks", dependencies=[Depends(require_api_key)])
+async def create_agent_task(payload: AgentTaskIn, db=Depends(get_db)):
+    task_id = uuid4().hex
+    data = payload.model_dump()
+    await db.prepare(
+        """INSERT INTO agent_tasks
+        (id, agent, objective, priority, related_opportunity_id, status, result_summary, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'queued', '', ?, ?)"""
+    ).bind(task_id, data["agent"], data["objective"], data["priority"],
+           data["related_opportunity_id"], now_iso(), now_iso()).run()
+    await write_audit(db, "agent_task.queued", task_id, data["agent"])
+    return {"id": task_id, "status": "queued", "execution": "not_started"}
+
+@app.get("/agent-tasks", dependencies=[Depends(require_api_key)])
+async def list_agent_tasks(db=Depends(get_db)):
+    result = await db.prepare(
+        """SELECT id, agent, objective, priority, related_opportunity_id, status, result_summary, created_at, updated_at
+        FROM agent_tasks ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
+        created_at DESC LIMIT 300"""
+    ).all()
+    return result.results.to_py()
+
+@app.post("/agent-tasks/{task_id}/status", dependencies=[Depends(require_api_key)])
+async def update_agent_task(task_id: str, payload: AgentTaskStatusIn, db=Depends(get_db)):
+    existing = await db.prepare("SELECT id, status FROM agent_tasks WHERE id = ?").bind(task_id).first()
+    if existing is None:
+        raise HTTPException(404, "agent task not found")
+    await db.prepare(
+        "UPDATE agent_tasks SET status = ?, result_summary = ?, updated_at = ? WHERE id = ?"
+    ).bind(payload.status, payload.result_summary, now_iso(), task_id).run()
+    await write_audit(db, "agent_task.status_changed", task_id, payload.status)
+    return {"id": task_id, "status": payload.status, "agent_execution": "not_automated"}
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
 async def audit_entries(db=Depends(get_db)):
