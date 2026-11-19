@@ -150,3 +150,14 @@ AURA now has a persistent agent task queue:
 - `GET /config` reports the owner-approved zero-capital, moderate-risk, 50/50 monthly distribution defaults.
 
 This is a task registry and orchestration foundation, not an autonomous runtime. No agents are running in the background, no external market scans are scheduled, and no integrations or financial transactions are active. Seeded tasks are queued plans, not completed work. Applying the updated D1 schema is required before these endpoints work in production.
+
+
+## Curated agent skill library
+
+AURA includes four local skill packs curated from relevant capabilities in [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills):
+- Market intelligence and opportunity validation
+- Growth, content, clipping, affiliate and commerce
+- Finance, investment research and risk
+- Platform engineering, orchestration and security
+
+See `skills/README.md`, `skills/registry.yaml`, and `docs/skill-adoption-plan.md` for the mapping, provenance, attribution and activation boundaries. These are AURA-authored playbooks and references, not a bulk import of all upstream skills. The current runtime does not dynamically load or execute them yet.
