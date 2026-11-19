@@ -73,3 +73,17 @@ INSERT INTO content_items (id,title,platform,format,pillar,hook,script,rights_st
 INSERT INTO content_items (id,title,platform,format,pillar,hook,script,rights_status,status,created_at,updated_at) VALUES ('maswibu_seed_12','Komentar adegan: kenapa momen ini menarik?','YouTube','Shorts','Original commentary','Adegan ini menarik karena...','','needs_review','idea','2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO content_items (id,title,platform,format,pillar,hook,script,rights_status,status,created_at,updated_at) VALUES ('maswibu_seed_13','Dua tipe perkembangan karakter','YouTube','Shorts','Original commentary','Dua tipe perkembangan karakter ini beda jauh.','','needs_review','idea','2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO content_items (id,title,platform,format,pillar,hook,script,rights_status,status,created_at,updated_at) VALUES ('maswibu_seed_14','Manhua apa yang wajib direview berikutnya?','YouTube','Shorts','Community prompt','Manhua apa yang wajib gua review berikutnya?','','needs_review','idea','2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    id TEXT PRIMARY KEY,
+    agent TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
+    related_opportunity_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','in_progress','blocked','completed','cancelled')),
+    result_summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_agent ON agent_tasks(agent);
