@@ -159,7 +159,7 @@ document.getElementById("oppform").addEventListener("submit",async e=>{e.prevent
 document.getElementById("contentform").addEventListener("submit",async e=>{e.preventDefault();let d=formData(e.target);try{await api("/content",{method:"POST",body:JSON.stringify(d)});e.target.reset();await refresh();say("Content idea saved")}catch(x){say(x.message)}});
 document.getElementById("approvalform").addEventListener("submit",async e=>{e.preventDefault();let d=formData(e.target);d.amount=Number(d.amount);try{await api("/approvals",{method:"POST",body:JSON.stringify(d)});e.target.reset();await refresh();say("Approval request queued")}catch(x){say(x.message)}});
 document.getElementById("ledgerform").addEventListener("submit",async e=>{e.preventDefault();let d=formData(e.target);d.amount=Number(d.amount);try{await api("/ledger",{method:"POST",body:JSON.stringify(d)});e.target.reset();await refresh();say("Ledger entry saved")}catch(x){say(x.message)}});
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));["opps","approvals","ledger"].forEach(x=>document.getElementById(x).classList.toggle("hidden",x!==b.dataset.tab))}));
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));["opps","content","approvals","ledger"].forEach(x=>document.getElementById(x).classList.toggle("hidden",x!==b.dataset.tab))}));
 if(apiKey){document.getElementById("key").value=apiKey;connect()}
 </script></body></html>
 """
