@@ -41,3 +41,19 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log(created_at);
+
+CREATE TABLE IF NOT EXISTS content_items (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK(platform IN ('YouTube','TikTok','Instagram','Website')),
+    format TEXT NOT NULL CHECK(format IN ('Shorts','Long-form','Carousel','Article')),
+    pillar TEXT NOT NULL,
+    hook TEXT NOT NULL,
+    script TEXT NOT NULL DEFAULT '',
+    rights_status TEXT NOT NULL DEFAULT 'needs_review' CHECK(rights_status IN ('needs_review','cleared','not_cleared')),
+    status TEXT NOT NULL DEFAULT 'idea' CHECK(status IN ('idea','draft','in_review','approved','published','paused')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_content_items_status ON content_items(status);
+CREATE INDEX IF NOT EXISTS idx_content_items_updated_at ON content_items(updated_at);
