@@ -356,6 +356,103 @@ async def update_content_status(content_id: str, payload: ContentStatusIn, db=De
     await write_audit(db, "content.status_changed", content_id, payload.status)
     return {"id": content_id, "status": payload.status, "publishing": "not_automated"}
 
+
+# Skill catalogue is bundled with the Worker; Markdown files remain the human-readable source of truth.
+SKILL_PACKS = {
+    "market-intelligence": {
+        "name": "Market Intelligence",
+        "file": "skills/market-intelligence.md",
+        "purpose": "Discover, research and score lawful revenue opportunities across markets.",
+    },
+    "growth-content-commerce": {
+        "name": "Growth, Content & Commerce",
+        "file": "skills/growth-content-commerce.md",
+        "purpose": "Create content and validate commerce, services, digital products and SEO growth.",
+    },
+    "finance-investment-risk": {
+        "name": "Finance, Investment & Risk",
+        "file": "skills/finance-investment-risk.md",
+        "purpose": "Reconcile cash, evaluate financial metrics and conduct paper-only investment research.",
+    },
+    "platform-engineering-security": {
+        "name": "Platform Engineering & Security",
+        "file": "skills/platform-engineering-security.md",
+        "purpose": "Build, test and secure AURA's software and operational workflows.",
+    },
+}
+
+AGENT_SKILLS = {
+    "CEO Orchestrator": ["platform-engineering-security", "market-intelligence"],
+    "Market Intelligence": ["market-intelligence"],
+    "Content & Media": ["growth-content-commerce"],
+    "Clipping Studio": ["growth-content-commerce"],
+    "Affiliate Commerce": ["growth-content-commerce"],
+    "E-commerce / Dropship": ["growth-content-commerce"],
+    "Service Sales": ["growth-content-commerce"],
+    "Digital Products": ["growth-content-commerce"],
+    "SEO / Website": ["growth-content-commerce"],
+    "Equity Research": ["finance-investment-risk"],
+    "Crypto Research": ["finance-investment-risk"],
+    "Trading Risk Manager": ["finance-investment-risk"],
+    "Finance & Treasury": ["finance-investment-risk"],
+    "Compliance & Rights": list(SKILL_PACKS.keys()),
+    "QA / Auditor": list(SKILL_PACKS.keys()),
+}
+
+
+def resolve_agent_skills(agent: str):
+    packs = AGENT_SKILLS.get(agent)
+    if packs is None:
+        raise HTTPException(422, "Unknown agent; agent name must match the AURA registry")
+    return packs
+
+
+async def persist_task_route(db, task_id: str, agent: str):
+    pack_ids = resolve_agent_skills(agent)
+    reason = "registry_binding:" + agent
+    timestamp = now_iso()
+    for pack_id in pack_ids:
+        await db.prepare(
+            """INSERT INTO task_skill_routes (task_id, pack_id, routing_reason, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(task_id, pack_id) DO UPDATE SET routing_reason = excluded.routing_reason"""
+        ).bind(task_id, pack_id, reason, timestamp).run()
+    await write_audit(db, "agent_task.skills_routed", task_id, ",".join(pack_ids))
+    return pack_ids
+
+
+@app.get("/skills", dependencies=[Depends(require_api_key)])
+async def list_skill_packs():
+    return [
+        {"id": pack_id, **metadata}
+        for pack_id, metadata in SKILL_PACKS.items()
+    ]
+
+
+@app.get("/agents/{agent_name}/skills", dependencies=[Depends(require_api_key)])
+async def list_agent_skills(agent_name: str):
+    pack_ids = resolve_agent_skills(agent_name)
+    return {
+        "agent": agent_name,
+        "skills": [{"id": pack_id, **SKILL_PACKS[pack_id]} for pack_id in pack_ids],
+        "execution": "not_started",
+    }
+
+
+@app.post("/agent-tasks/{task_id}/route", dependencies=[Depends(require_api_key)])
+async def route_agent_task(task_id: str, db=Depends(get_db)):
+    task = await db.prepare("SELECT id, agent FROM agent_tasks WHERE id = ?").bind(task_id).first()
+    if task is None:
+        raise HTTPException(404, "agent task not found")
+    pack_ids = await persist_task_route(db, task_id, task.agent)
+    return {
+        "task_id": task_id,
+        "agent": task.agent,
+        "skill_pack_ids": pack_ids,
+        "execution": "not_started",
+    }
+
+
 @app.post("/agent-tasks", dependencies=[Depends(require_api_key)])
 async def create_agent_task(payload: AgentTaskIn, db=Depends(get_db)):
     task_id = uuid4().hex
@@ -367,14 +464,19 @@ async def create_agent_task(payload: AgentTaskIn, db=Depends(get_db)):
     ).bind(task_id, data["agent"], data["objective"], data["priority"],
            data["related_opportunity_id"], now_iso(), now_iso()).run()
     await write_audit(db, "agent_task.queued", task_id, data["agent"])
-    return {"id": task_id, "status": "queued", "execution": "not_started"}
+    pack_ids = await persist_task_route(db, task_id, data["agent"])
+    return {"id": task_id, "status": "queued", "skill_pack_ids": pack_ids, "execution": "not_started"}
 
 @app.get("/agent-tasks", dependencies=[Depends(require_api_key)])
 async def list_agent_tasks(db=Depends(get_db)):
     result = await db.prepare(
-        """SELECT id, agent, objective, priority, related_opportunity_id, status, result_summary, created_at, updated_at
-        FROM agent_tasks ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
-        created_at DESC LIMIT 300"""
+        """SELECT t.id, t.agent, t.objective, t.priority, t.related_opportunity_id, t.status,
+        t.result_summary, t.created_at, t.updated_at,
+        COALESCE(GROUP_CONCAT(r.pack_id, ','), '') AS skill_pack_ids
+        FROM agent_tasks t LEFT JOIN task_skill_routes r ON r.task_id = t.id
+        GROUP BY t.id
+        ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
+        t.created_at DESC LIMIT 300"""
     ).all()
     return result.results.to_py()
 
