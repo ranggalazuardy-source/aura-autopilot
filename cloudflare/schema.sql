@@ -104,3 +104,15 @@ INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,stat
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_13','Finance & Treasury','Prepare 50/50 monthly close and cash reconciliation design','high','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_14','Compliance & Rights','Review proposed business models for legal, platform and IP constraints','high','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_15','QA / Auditor','Audit assumptions, agent outputs and task completion evidence','normal','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
+\n
+-- Deterministic agent-to-skill routing metadata. This records assignment only;
+-- it does not execute an LLM, external tool, integration, or financial action.
+CREATE TABLE IF NOT EXISTS task_skill_routes (
+    task_id TEXT NOT NULL,
+    pack_id TEXT NOT NULL,
+    routing_reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, pack_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_skill_routes_pack ON task_skill_routes(pack_id);
+
