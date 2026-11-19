@@ -439,6 +439,20 @@ async def list_agent_skills(agent_name: str):
     }
 
 
+@app.get("/agent-skills", dependencies=[Depends(require_api_key)])
+async def get_agent_skills(request: Request):
+    # Query form supports registry names that contain slashes, e.g. E-commerce / Dropship.
+    agent_name = request.query_params.get("agent", "")
+    if not agent_name:
+        raise HTTPException(422, "agent query parameter is required")
+    pack_ids = resolve_agent_skills(agent_name)
+    return {
+        "agent": agent_name,
+        "skills": [{"id": pack_id, **SKILL_PACKS[pack_id]} for pack_id in pack_ids],
+        "execution": "not_started",
+    }
+
+
 @app.post("/agent-tasks/{task_id}/route", dependencies=[Depends(require_api_key)])
 async def route_agent_task(task_id: str, db=Depends(get_db)):
     task = await db.prepare("SELECT id, agent FROM agent_tasks WHERE id = ?").bind(task_id).first()
