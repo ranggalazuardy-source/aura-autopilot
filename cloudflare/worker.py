@@ -72,6 +72,18 @@ class LedgerIn(BaseModel):
     amount: float = Field(gt=0)
     note: str = Field(default="", max_length=1000)
 
+class ContentItemIn(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    platform: str = Field(default="YouTube", pattern="^(YouTube|TikTok|Instagram|Website)$")
+    format: str = Field(default="Shorts", pattern="^(Shorts|Long-form|Carousel|Article)$")
+    pillar: str = Field(default="Manhua review", max_length=80)
+    hook: str = Field(min_length=3, max_length=500)
+    script: str = Field(default="", max_length=10000)
+    rights_status: str = Field(default="needs_review", pattern="^(needs_review|cleared|not_cleared)$")
+
+class ContentStatusIn(BaseModel):
+    status: str = Field(pattern="^(idea|draft|in_review|approved|published|paused)$")
+
 
 DASHBOARD = r"""
 <!doctype html>
@@ -282,6 +294,42 @@ async def ledger_entries(db=Depends(get_db)):
     ).all()
     return result.results.to_py()
 
+
+@app.post("/content", dependencies=[Depends(require_api_key)])
+async def create_content_item(payload: ContentItemIn, db=Depends(get_db)):
+    item_id = uuid4().hex
+    data = payload.model_dump()
+    await db.prepare(
+        """INSERT INTO content_items
+        (id, title, platform, format, pillar, hook, script, rights_status, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idea', ?, ?)"""
+    ).bind(item_id, data["title"], data["platform"], data["format"], data["pillar"],
+           data["hook"], data["script"], data["rights_status"], now_iso(), now_iso()).run()
+    await write_audit(db, "content.created", item_id, data["title"])
+    return {"id": item_id, "status": "idea"}
+
+@app.get("/content", dependencies=[Depends(require_api_key)])
+async def list_content_items(db=Depends(get_db)):
+    result = await db.prepare(
+        """SELECT id, title, platform, format, pillar, hook, script, rights_status, status, created_at, updated_at
+        FROM content_items ORDER BY updated_at DESC LIMIT 200"""
+    ).all()
+    return result.results.to_py()
+
+@app.post("/content/{content_id}/status", dependencies=[Depends(require_api_key)])
+async def update_content_status(content_id: str, payload: ContentStatusIn, db=Depends(get_db)):
+    existing = await db.prepare("SELECT id, status FROM content_items WHERE id = ?").bind(content_id).first()
+    if existing is None:
+        raise HTTPException(404, "content item not found")
+    if payload.status == "approved":
+        item = await db.prepare("SELECT rights_status FROM content_items WHERE id = ?").bind(content_id).first()
+        if item.rights_status != "cleared":
+            raise HTTPException(409, "content rights must be cleared before approval")
+    await db.prepare("UPDATE content_items SET status = ?, updated_at = ? WHERE id = ?").bind(
+        payload.status, now_iso(), content_id
+    ).run()
+    await write_audit(db, "content.status_changed", content_id, payload.status)
+    return {"id": content_id, "status": payload.status, "publishing": "not_automated"}
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
 async def audit_entries(db=Depends(get_db)):
