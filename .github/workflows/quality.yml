@@ -19,14 +19,16 @@ jobs:
           python-version: "3.13"
       - name: Compile Python sources
         run: python -m compileall -q app cloudflare
-      - name: Run skill routing tests\n        run: python -m unittest discover -s tests -v\n      - name: Validate D1 schema with SQLite
+      - name: Run skill routing tests
+        run: python -m unittest discover -s tests -v
+      - name: Validate D1 schema with SQLite
         run: |
           python - <<'PY'
           import sqlite3
           from pathlib import Path
           db = sqlite3.connect(":memory:")
           db.executescript(Path("cloudflare/schema.sql").read_text(encoding="utf-8"))
-          expected = {"opportunities", "approvals", "ledger", "audit_log"}
+          expected = {"opportunities", "approvals", "ledger", "audit_log", "agent_tasks", "task_skill_routes"}
           actual = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           missing = expected - actual
           assert not missing, f"Missing tables: {sorted(missing)}"
