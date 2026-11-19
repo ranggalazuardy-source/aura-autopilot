@@ -1,0 +1,71 @@
+# AURA Operational Configuration
+# Effective immediately for planning and system defaults.
+# No live financial integrations are authorized by this configuration.
+
+[owner]
+name = "Rangga"
+currency = "IDR"
+timezone = "Asia/Jakarta"
+
+[capital]
+initial_capital_idr = 0
+mode = "zero_capital"
+external_funding_requires_explicit_approval = true
+
+[distribution]
+owner_share_percent = 50
+reinvestment_share_percent = 50
+frequency = "monthly"
+closing_day = 1
+timezone = "Asia/Jakarta"
+basis = "reconciled_net_distributable_cash_only"
+guaranteed_minimum = false
+transfer_execution = "owner_initiated"
+
+[risk]
+profile = "moderate"
+live_trading_enabled = false
+paper_trading_enabled = true
+leverage_enabled = false
+margin_enabled = false
+derivatives_enabled = false
+short_selling_enabled = false
+crypto_live_execution_enabled = false
+equity_live_execution_enabled = false
+per_trade_loss_limit_idr = 0
+daily_loss_limit_idr = 0
+portfolio_drawdown_limit_percent = 0
+note = "Risk limits must be explicitly configured and approved before any live investment execution."
+
+[approvals]
+all_spending_requires_explicit_owner_approval = true
+all_financial_transactions_require_explicit_owner_approval = true
+public_publishing_requires_owner_approval = true
+commercial_commitments_require_owner_approval = true
+account_security_changes_require_owner_approval = true
+withdrawals_and_transfers_agent_access = false
+borrowing_requires_explicit_owner_approval = true
+paid_ads_require_explicit_owner_approval = true
+subscriptions_and_api_costs_require_explicit_owner_approval = true
+
+[wallets]
+ai_owned_wallet_allowed = false
+owner_controlled_accounts_only = true
+read_only_api_keys_by_default = true
+withdrawal_permissions = false
+transfer_permissions = false
+credentials_in_source_code = false
+
+[reporting]
+daily_internal_summary = true
+monthly_owner_report = true
+monthly_report_day = 1
+separate_business_revenue = true
+separate_realized_investment_pnl = true
+separate_unrealized_investment_pnl = true
+include_fees_refunds_taxes_reserves = true
+report_available_distribution_cash = true
+
+[autonomy]
+default_level = "L2"
+levels = ["L0_observe", "L1_recommend", "L2_prepare", "L3_bounded_nonfinancial_execution", "L4_financial_execution_disabled"]
