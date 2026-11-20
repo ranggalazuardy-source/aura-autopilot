@@ -23,7 +23,11 @@ API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
 app = FastAPI(
     title="AURA — Autonomous Unified Revenue Agent",
     version=VERSION,
-    docs_url="/docs",
+    # Public schema generation is not required by the dashboard and has caused
+    # runtime failures in the Workers/Pyodide deployment. Keep API discovery off
+    # in production; authenticated behavior is covered by deployment smoke tests.
+    openapi_url=None,
+    docs_url=None,
     redoc_url=None,
 )
 
