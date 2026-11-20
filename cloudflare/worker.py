@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from workers import asgi
 
-VERSION = "0.9.1"
+VERSION = "1.0.0"
 app = FastAPI(
     title="AURA — Autonomous Unified Revenue Agent",
     version=VERSION,
@@ -212,7 +212,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <label>API key</label><input id="key" type="password" autocomplete="off" placeholder="Masukkan AURA_API_KEY">
 <button class="primary" onclick="connect()">Connect</button><p class="hint">Key hanya disimpan di session browser ini, bukan di repository.</p><div id="loginmsg" class="hint"></div></div>
 <div id="app" class="hidden">
-<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
+<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><a class="tab" href="/office/">3D Virtual Office ↗</a><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
 <div class="grid">
 <div class="metric"><span class="muted">Confirmed income</span><strong id="income">Rp0</strong></div>
 <div class="metric"><span class="muted">Recorded expenses</span><strong id="expense">Rp0</strong></div>
@@ -510,6 +510,26 @@ AGENT_SKILLS = {
     "QA / Auditor": ["market-intelligence", "growth-content-commerce", "finance-investment-risk", "platform-engineering-security"],
 }
 
+# Stable character identity, office zone and visual treatment for all 15 AURA agents.
+AGENT_OFFICE_PROFILES = {
+    "CEO Orchestrator": {"title": "Chief Executive", "zone": "command", "archetype": "captain", "color": "#a78bfa", "hair": "#332b49", "tagline": "Portfolio priorities and agent coordination"},
+    "Market Intelligence": {"title": "Market Analyst", "zone": "research", "archetype": "analyst", "color": "#38bdf8", "hair": "#26384c", "tagline": "Demand, competitors and opportunity evidence"},
+    "Content & Media": {"title": "Creative Director", "zone": "studio", "archetype": "creator", "color": "#fb7185", "hair": "#4b2630", "tagline": "Original content concepts and production briefs"},
+    "Clipping Studio": {"title": "Clip Editor", "zone": "studio", "archetype": "headphones", "color": "#f97316", "hair": "#4a3024", "tagline": "Authorized footage, edits and clip packaging"},
+    "Affiliate Commerce": {"title": "Affiliate Strategist", "zone": "studio", "archetype": "glasses", "color": "#f472b6", "hair": "#4a2941", "tagline": "Product fit, disclosure and conversion economics"},
+    "E-commerce / Dropship": {"title": "Commerce Operator", "zone": "studio", "archetype": "cap", "color": "#facc15", "hair": "#4a4324", "tagline": "Supplier quality, logistics and unit margin"},
+    "Service Sales": {"title": "Client Partner", "zone": "studio", "archetype": "tie", "color": "#34d399", "hair": "#214235", "tagline": "Qualified prospects and owner-approved outreach"},
+    "Digital Products": {"title": "Product Designer", "zone": "studio", "archetype": "beret", "color": "#c084fc", "hair": "#3d2b4b", "tagline": "Original digital assets and demand validation"},
+    "SEO / Website": {"title": "SEO Strategist", "zone": "research", "archetype": "glasses", "color": "#22d3ee", "hair": "#24434a", "tagline": "Useful search-led pages and organic discovery"},
+    "Equity Research": {"title": "Equity Analyst", "zone": "finance", "archetype": "tie", "color": "#60a5fa", "hair": "#25354b", "tagline": "Fundamentals, valuation and paper watchlist"},
+    "Crypto Research": {"title": "Digital Asset Analyst", "zone": "finance", "archetype": "headphones", "color": "#fbbf24", "hair": "#4a3b1c", "tagline": "Token, custody, liquidity and protocol risk"},
+    "Trading Risk Manager": {"title": "Risk Officer", "zone": "finance", "archetype": "visor", "color": "#fb923c", "hair": "#4b3424", "tagline": "Independent veto, loss limits and stop conditions"},
+    "Finance & Treasury": {"title": "Finance Controller", "zone": "finance", "archetype": "glasses", "color": "#4ade80", "hair": "#24412b", "tagline": "Reconciliation and monthly 50/50 close"},
+    "Compliance & Rights": {"title": "Compliance Counsel", "zone": "trust", "archetype": "shield", "color": "#f87171", "hair": "#492a2a", "tagline": "Legal, platform, privacy and intellectual property"},
+    "QA / Auditor": {"title": "Quality Auditor", "zone": "trust", "archetype": "badge", "color": "#e2e8f0", "hair": "#344052", "tagline": "Evidence review, correctness and release gate"},
+}
+
+
 
 def resolve_agent_skills(agent: str):
     packs = AGENT_SKILLS.get(agent)
@@ -751,6 +771,114 @@ async def list_agent_tasks(db=Depends(get_db)):
         t.created_at DESC LIMIT 300"""
     ).all()
     return result.results.to_py()
+
+
+@app.get("/office/state", dependencies=[Depends(require_api_key)])
+async def virtual_office_state(db=Depends(get_db)):
+    """Authenticated live snapshot for the 3D office; status is derived from D1 task and lease data."""
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    task_result = await db.prepare(
+        """SELECT t.id, t.agent, t.objective, t.priority, t.related_opportunity_id,
+        t.status, t.result_summary, t.created_at, t.updated_at,
+        l.worker_id, l.expires_at AS lease_expires_at,
+        COALESCE((SELECT GROUP_CONCAT(r.pack_id, ',') FROM task_skill_routes r WHERE r.task_id = t.id), '') AS skill_pack_ids
+        FROM agent_tasks t
+        LEFT JOIN task_execution_leases l ON l.task_id = t.id
+        ORDER BY t.updated_at DESC LIMIT 500"""
+    ).all()
+    all_tasks = task_result.results.to_py()
+    active_tasks = []
+    for task in all_tasks:
+        expires = task.get("lease_expires_at")
+        lease_active = expires is not None and int(expires) > now_epoch
+        if task["status"] in {"queued", "in_progress", "blocked"}:
+            task["lease_active"] = lease_active
+            task["stale_lease"] = task["status"] == "in_progress" and not lease_active
+            if task["status"] == "in_progress" and lease_active:
+                task["runtime_state"] = "working"
+            elif task["status"] == "blocked":
+                task["runtime_state"] = "waiting_input"
+            else:
+                task["runtime_state"] = "idle"
+            active_tasks.append(task)
+
+    priority_order = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+    status_order = {"in_progress": 0, "blocked": 1, "queued": 2}
+    active_tasks.sort(key=lambda item: (
+        status_order.get(item["status"], 9),
+        priority_order.get(item["priority"], 9),
+        item["updated_at"],
+    ))
+
+    agents = []
+    for agent_name, profile in AGENT_OFFICE_PROFILES.items():
+        owned = [item for item in active_tasks if item["agent"] == agent_name]
+        working = [item for item in owned if item["status"] == "in_progress" and item["lease_active"]]
+        waiting = [item for item in owned if item["status"] == "blocked"]
+        queued = [item for item in owned if item["status"] == "queued"]
+        stale = [item for item in owned if item["stale_lease"]]
+        if working:
+            state = "working"
+            current = working[0]
+        elif waiting:
+            state = "waiting_input"
+            current = waiting[0]
+        else:
+            state = "idle"
+            current = queued[0] if queued else (stale[0] if stale else None)
+        agents.append({
+            "name": agent_name,
+            **profile,
+            "status": state,
+            "current_task": ({
+                "id": current["id"],
+                "objective": current["objective"],
+                "task_status": current["status"],
+                "priority": current["priority"],
+                "stale_lease": current["stale_lease"],
+            } if current else None),
+            "working_tasks": len(working),
+            "waiting_tasks": len(waiting),
+            "queued_tasks": len(queued),
+            "stale_tasks": len(stale),
+        })
+
+    log_result = await db.prepare(
+        """SELECT id, event_type, object_id, details, created_at
+        FROM audit_log ORDER BY created_at DESC LIMIT 60"""
+    ).all()
+    logs = log_result.results.to_py()
+    now_date = datetime.now(timezone.utc).date().isoformat()
+    completed_today = sum(
+        1 for item in all_tasks
+        if item["status"] == "completed" and str(item["updated_at"]).startswith(now_date)
+    )
+    return {
+        "generated_at": now_iso(),
+        "refresh_interval_ms": 5000,
+        "agents": agents,
+        "active_tasks": active_tasks[:100],
+        "logs": logs,
+        "summary": {
+            "agents_total": len(agents),
+            "agents_working": sum(1 for item in agents if item["status"] == "working"),
+            "agents_waiting_input": sum(1 for item in agents if item["status"] == "waiting_input"),
+            "agents_idle": sum(1 for item in agents if item["status"] == "idle"),
+            "active_tasks": len(active_tasks),
+            "working_tasks": sum(1 for item in active_tasks if item["runtime_state"] == "working"),
+            "queued_tasks": sum(1 for item in active_tasks if item["status"] == "queued"),
+            "blocked_tasks": sum(1 for item in active_tasks if item["status"] == "blocked"),
+            "stale_leases": sum(1 for item in active_tasks if item["stale_lease"]),
+            "completed_today": completed_today,
+        },
+        "runtime": {
+            "execution_mode": "bounded_lease_worker",
+            "model_provider_enabled": False,
+            "background_scheduler_enabled": False,
+            "live_financial_execution_enabled": False,
+            "note": "A character is marked working only while its D1 task has a valid, unexpired worker lease. Queued work is idle; blocked work is waiting for owner input.",
+        },
+    }
 
 
 # Safe, deterministic tools only. No shell, network, file access or financial actions.
