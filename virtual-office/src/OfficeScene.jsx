@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, ContactShadows } from "@react-three/drei";
 
 const ZONE_LAYOUT = {
@@ -111,7 +111,34 @@ function AgentCharacter({ agent, homePosition, workPosition, waitingPosition, se
     <Html position={[0, 1.96, 0]} center distanceFactor={10} style={{ pointerEvents: "none" }}>
       <div className="agent-scene-tag"><span className="agent-tag-dot" style={{ background: stateColor }} /><span>{agent.name}</span></div>
     </Html>
+    <Html position={[0, 2.72, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+      <div className={"agent-notice " + (agent.status || "idle")}>
+        <strong>{agent.status === "working" ? "SEDANG BEKERJA" : agent.status === "waiting_input" ? "MENUNGGU INPUT" : "SIAP / IDLE"}</strong>
+        <span>{agent.current_task?.objective || (agent.status === "working" ? "Menjalankan tugas aktif" : agent.status === "waiting_input" ? "Butuh arahan pemilik" : "Belum ada tugas aktif")}</span>
+      </div>
+    </Html>
   </group>;
+}
+
+function FitCamera({ controlsRef }) {
+  const { camera, size } = useThree();
+  React.useEffect(() => {
+    const aspect = size.width / Math.max(size.height, 1);
+    const halfFov = THREE.MathUtils.degToRad((camera.fov || 42) / 2);
+    const distanceForWidth = 25.2 / (2 * Math.tan(halfFov) * aspect);
+    const distanceForDepth = 17.2 / (2 * Math.tan(halfFov));
+    const distance = Math.max(distanceForWidth, distanceForDepth) * 1.2;
+    const target = new THREE.Vector3(0, 0.65, 0);
+    const direction = new THREE.Vector3(0, 0.72, 0.69).normalize();
+    camera.position.copy(target).addScaledVector(direction, distance);
+    camera.lookAt(target);
+    camera.updateProjectionMatrix();
+    if (controlsRef.current) {
+      controlsRef.current.target.copy(target);
+      controlsRef.current.update();
+    }
+  }, [camera, size.width, size.height, controlsRef]);
+  return null;
 }
 
 function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
@@ -131,6 +158,7 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
     });
   }, [agents]);
   return <>
+    <FitCamera controlsRef={controlsRef} />
     <color attach="background" args={["#f4f6fb"]} />
     <fog attach="fog" args={["#f4f6fb", 28, 48]} />
     <ambientLight intensity={1.65} />
@@ -145,7 +173,7 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
     <mesh position={[0, 0.53, -0.04]}><boxGeometry args={[0.67, 0.04, 0.06]} /><meshStandardMaterial color="#f3d48a" emissive="#f3d48a" emissiveIntensity={0.22} /></mesh>
     {positionedAgents.map((agent) => <AgentCharacter key={agent.name} agent={agent} homePosition={agent.home} workPosition={agent.work} waitingPosition={agent.waiting} selected={selectedAgent === agent.name} onSelect={onSelectAgent} />)}
     <ContactShadows position={[0, -0.025, 0]} opacity={0.28} scale={27} blur={2.2} far={9} />
-    <OrbitControls ref={controlsRef} makeDefault target={[0, 0.7, 0]} minDistance={13} maxDistance={42} minPolarAngle={0.55} maxPolarAngle={1.38} enableDamping dampingFactor={0.08} enableZoom zoomSpeed={0.8} enablePan autoRotate autoRotateSpeed={0.22} />
+    <OrbitControls ref={controlsRef} makeDefault target={[0, 0.65, 0]} minDistance={18} maxDistance={90} minPolarAngle={0.55} maxPolarAngle={1.28} enableDamping dampingFactor={0.08} enableZoom zoomSpeed={0.65} enablePan={false} />
   </>;
 }
 
@@ -160,7 +188,7 @@ export default function OfficeScene({ agents = [], selectedAgent, onSelectAgent 
   };
   const resetView = () => controlsRef.current?.reset();
   return <div className="scene-canvas-wrap">
-    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [21, 25, 22], zoom: 43, near: 0.1, far: 100, up: [0, 1, 0] }} gl={{ antialias: true, alpha: false }}>
+    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 44, 42], fov: 42, near: 0.1, far: 180, up: [0, 1, 0] }} gl={{ antialias: true, alpha: false }}>
       <SceneContents agents={agents} selectedAgent={selectedAgent} onSelectAgent={onSelectAgent} controlsRef={controlsRef} />
     </Canvas>
     <div className="scene-controls" aria-label="Floor plan controls">

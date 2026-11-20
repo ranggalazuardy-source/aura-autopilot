@@ -1086,6 +1086,9 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
                      if provider_config[name][0] and provider_config[name][1]]
     else:
         providers = [payload.provider]
+        if payload.provider == "cloudflare":
+            if not _truthy_env(env, "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED"):
+                raise HTTPException(403, "Owner must confirm the Cloudflare Workers Free plan before use")
         if not provider_config[payload.provider][0]:
             raise HTTPException(403, "Selected provider is not explicitly enabled and confirmed Free tier")
         if not provider_config[payload.provider][1]:
