@@ -4,9 +4,11 @@
   "main": "cloudflare/worker.py",
   "compatibility_date": "2026-11-20",
   "compatibility_flags": ["python_workers"],
+  "workers_dev": true,
   "assets": {
     "directory": "./virtual-office/dist",
     "base_path": "/office",
+    "run_worker_first": ["/office/state*"],
     "html_handling": "auto-trailing-slash"
   },
   "d1_databases": [
