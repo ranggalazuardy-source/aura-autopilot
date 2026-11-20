@@ -33,7 +33,7 @@ jobs:
           [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || missing+=("CLOUDFLARE_ACCOUNT_ID")
           [[ -n "$AURA_API_KEY" ]] || missing+=("AURA_API_KEY")
           if (( ${#missing[@]} > 0 )); then
-            printf '::error::Missing GitHub repository secrets: %s\\n' "${missing[*]}"
+            printf '::error::Missing GitHub repository secrets: %s\n' "${missing[*]}"
             exit 1
           fi
           echo "Required deployment secrets are present."
@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .deploy-tools
-          printf '{"private":true}\\n' > .deploy-tools/package.json
+          printf '{"private":true}\n' > .deploy-tools/package.json
           npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.148.0
           WRANGLER_BIN="$GITHUB_WORKSPACE/.deploy-tools/node_modules/.bin"
           echo "$WRANGLER_BIN" >> "$GITHUB_PATH"
@@ -123,7 +123,7 @@ jobs:
           const binding = (config.d1_databases || []).find((item) => item.binding === "DB");
           if (!binding) throw new Error("D1 binding DB is missing from wrangler.jsonc");
           binding.database_id = process.env.AURA_D1_DATABASE_ID;
-          fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\\n");
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
           NODE
 
           echo "D1 database is ready."
@@ -150,7 +150,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          WORKER_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\\.workers\\.dev' /tmp/aura-deploy.log | tail -n 1 || true)"
+          WORKER_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' /tmp/aura-deploy.log | tail -n 1 || true)"
           if [[ -z "$WORKER_URL" ]]; then
             echo "::error::The deploy output did not include a workers.dev URL. Check whether the workers.dev subdomain is enabled for this account."
             exit 1
