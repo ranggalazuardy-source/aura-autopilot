@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
-from workers import asgi
+from workers import WorkerEntrypoint, asgi
 
 VERSION = "1.0.1"
 app = FastAPI(
@@ -1507,4 +1507,7 @@ async def audit_entries(db=Depends(get_db)):
     return result.results.to_py()
 
 
-Default = asgi.entrypoint(app)
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        # Pass the runtime env explicitly so FastAPI's ASGI scope receives D1 and secrets.
+        return await asgi.fetch(app, request.js_object, self.env)
