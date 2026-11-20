@@ -3,12 +3,16 @@
   "name": "aura-autopilot-api",
   "main": "cloudflare/worker.py",
   "compatibility_date": "2026-11-20",
-  "compatibility_flags": ["python_workers"],
+  "compatibility_flags": [
+    "python_workers"
+  ],
   "workers_dev": true,
   "assets": {
     "directory": "./virtual-office/dist",
     "base_path": "/office",
-    "run_worker_first": ["/office/state*"],
+    "run_worker_first": [
+      "/office/state*"
+    ],
     "html_handling": "auto-trailing-slash"
   },
   "d1_databases": [
@@ -17,5 +21,22 @@
       "database_name": "aura-autopilot-db",
       "database_id": "00000000-0000-0000-0000-000000000000"
     }
-  ]
+  ],
+  "ratelimits": [
+    {
+      "name": "AURA_AUTH_RATE_LIMITER",
+      "namespace_id": "204382026",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  }
 }
