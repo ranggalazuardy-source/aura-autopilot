@@ -251,7 +251,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <div id="msg" class="notice hidden"></div>
 </div></main>
 <script>
-let apiKey=sessionStorage.getItem("aura_key")||"";\nlet activeResearchRun="";
+let apiKey=sessionStorage.getItem("aura_key")||"";
+let activeResearchRun="";
 const fmt=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n||0));
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{"Content-Type":"application/json","X-AURA-API-Key":apiKey,...(opts.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.detail||("HTTP "+r.status));return d}
