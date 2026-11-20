@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 import math
 from uuid import uuid4
 import hmac
@@ -13,10 +12,12 @@ from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from workers import WorkerEntrypoint, asgi
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
+API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
 app = FastAPI(
     title="AURA — Autonomous Unified Revenue Agent",
     version=VERSION,
@@ -40,10 +41,9 @@ def get_db(request: Request):
     return env.DB
 
 
-async def require_api_key(request: Request):
+async def require_api_key(request: Request, supplied: str | None = Depends(API_KEY_HEADER)):
     env = get_env(request)
     expected = getattr(env, "AURA_API_KEY", None) if env else None
-    supplied = request.headers.get("X-AURA-API-Key", "")
     if not expected:
         raise HTTPException(503, "AURA_API_KEY secret has not been configured")
     if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
@@ -857,7 +857,7 @@ async def virtual_office_state(db=Depends(get_db)):
         FROM audit_log ORDER BY created_at DESC LIMIT 60"""
     ).all()
     logs = log_result.results.to_py()
-    jakarta_tz = ZoneInfo("Asia/Jakarta")
+    jakarta_tz = timezone(timedelta(hours=7))
     today_jakarta = datetime.now(timezone.utc).astimezone(jakarta_tz).date()
     completed_today = 0
     for item in all_tasks:
