@@ -276,6 +276,14 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("Too many invalid API-key attempts", self.source)
         self.assertIn("Authentication rate limiter is not configured", self.source)
 
+    def test_cloudflare_rate_limiter_and_free_plan_observability_are_configured(self):
+        import json
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        rate = next(item for item in config["ratelimits"] if item["name"] == "AURA_AUTH_RATE_LIMITER")
+        self.assertEqual(rate["simple"], {"limit": 10, "period": 60})
+        self.assertTrue(config["observability"]["enabled"])
+        self.assertTrue(config["observability"]["logs"]["enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()
