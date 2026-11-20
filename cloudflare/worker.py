@@ -1417,9 +1417,11 @@ async def close_research_run(run_id: str, db=Depends(get_db)):
         raise HTTPException(404, "research run not found")
     if run.status != "collecting":
         raise HTTPException(409, "only collecting research runs can be completed")
-    await db.prepare(
-        "UPDATE research_runs SET status = 'completed', completed_at = ? WHERE id = ?"
-    ).bind(now_iso(), run_id).run()
+    closed = await db.prepare(
+        "UPDATE research_runs SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'collecting' RETURNING id"
+    ).bind(now_iso(), run_id).first()
+    if closed is None:
+        raise HTTPException(409, "research run was already closed")
     counts = await db.prepare(
         """SELECT COUNT(*) AS total,
         SUM(CASE WHEN verification_status = 'verified' THEN 1 ELSE 0 END) AS verified
