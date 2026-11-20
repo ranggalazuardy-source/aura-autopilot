@@ -952,6 +952,27 @@ async def create_research_run(payload: ResearchRunIn, db=Depends(get_db)):
     return {"id": run_id, "status": "collecting", "collection_mode": "manual_source_ingestion"}
 
 
+
+@app.post("/research/runs/{run_id}/close", dependencies=[Depends(require_api_key)])
+async def close_research_run(run_id: str, db=Depends(get_db)):
+    run = await db.prepare("SELECT id, status FROM research_runs WHERE id = ?").bind(run_id).first()
+    if run is None:
+        raise HTTPException(404, "research run not found")
+    if run.status == "cancelled":
+        raise HTTPException(409, "cancelled research run cannot be completed")
+    await db.prepare(
+        "UPDATE research_runs SET status = 'completed', completed_at = ? WHERE id = ?"
+    ).bind(now_iso(), run_id).run()
+    counts = await db.prepare(
+        """SELECT COUNT(*) AS total,
+        SUM(CASE WHEN verification_status = 'verified' THEN 1 ELSE 0 END) AS verified
+        FROM research_sources WHERE run_id = ?"""
+    ).bind(run_id).first()
+    await write_audit(db, "research.run_completed", run_id, "")
+    return {"id": run_id, "status": "completed", "sources": int(counts.total or 0),
+            "verified_sources": int(counts.verified or 0)}
+
+
 @app.get("/research/runs", dependencies=[Depends(require_api_key)])
 async def list_research_runs(db=Depends(get_db)):
     result = await db.prepare(
@@ -1130,6 +1151,39 @@ async def record_ceo_decision(payload: CEODecisionIn, db=Depends(get_db)):
     await write_audit(db, "ceo.decision_recorded", decision_id, payload.decision)
     return {"id": decision_id, "decision": payload.decision,
             "selected_opportunity_id": payload.selected_opportunity_id,
+            "owner_approval_required": True, "execution": "not_started"}
+
+
+
+@app.get("/ceo/recommendation/{comparison_id}", dependencies=[Depends(require_api_key)])
+async def get_ceo_recommendation(comparison_id: str, db=Depends(get_db)):
+    comparison = await db.prepare(
+        "SELECT id, comparison_json FROM market_comparisons WHERE id = ?"
+    ).bind(comparison_id).first()
+    if comparison is None:
+        raise HTTPException(404, "comparison not found")
+    ranked = json.loads(comparison.comparison_json)
+    if not ranked:
+        return {"comparison_id": comparison_id, "suggested_decision": "collect_evidence",
+                "selected_opportunity_id": "", "reason": "No opportunities in comparison."}
+    best = ranked[0]
+    if best.get("score") is None or best.get("confidence") is None:
+        decision, reason = "collect_evidence", "At least one score or evidence-confidence measure is missing."
+        selected = ""
+    elif float(best["estimated_cost"] or 0) > 0:
+        decision, reason = "collect_evidence", "The leading opportunity has non-zero estimated cost under the Rp0 capital policy."
+        selected = ""
+    elif float(best["score"]) >= 70 and float(best["confidence"]) >= 60:
+        decision, reason = "recommend_pilot", "Top-ranked opportunity meets the score and evidence thresholds with zero estimated cost."
+        selected = best["id"]
+    elif float(best["score"]) >= 55 and float(best["confidence"]) >= 35:
+        decision, reason = "collect_evidence", "Promising score, but more evidence is needed before a pilot recommendation."
+        selected = best["id"]
+    else:
+        decision, reason = "deprioritize", "The leading opportunity does not meet minimum score and confidence thresholds."
+        selected = best["id"]
+    return {"comparison_id": comparison_id, "suggested_decision": decision,
+            "selected_opportunity_id": selected, "reason": reason,
             "owner_approval_required": True, "execution": "not_started"}
 
 
