@@ -4,22 +4,22 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, OrbitControls, ContactShadows } from "@react-three/drei";
 
 const ZONE_LAYOUT = {
-  command: { title: "COMMAND CENTER", center: [-8.0, -4.0], accent: "#a78bfa", floor: "#25243c" },
-  research: { title: "MARKET & RESEARCH LAB", center: [-1.1, -4.0], accent: "#38bdf8", floor: "#1d3341" },
-  studio: { title: "CONTENT & COMMERCE STUDIO", center: [5.9, -4.0], accent: "#fb7185", floor: "#3b2935" },
-  finance: { title: "FINANCE & RISK SUITE", center: [-4.6, 3.1], accent: "#34d399", floor: "#20372f" },
-  trust: { title: "TRUST, RIGHTS & QA", center: [4.3, 3.1], accent: "#f59e0b", floor: "#3a3225" }
+  command: { title: "COMMAND CENTER", center: [-8.0, -4.0], accent: "#a78bfa", floor: "#e9e7f5" },
+  research: { title: "MARKET & RESEARCH LAB", center: [-1.1, -4.0], accent: "#38bdf8", floor: "#e4f0f5" },
+  studio: { title: "CONTENT & COMMERCE STUDIO", center: [5.9, -4.0], accent: "#fb7185", floor: "#f5e8eb" },
+  finance: { title: "FINANCE & RISK SUITE", center: [-4.6, 3.1], accent: "#34d399", floor: "#e5f2eb" },
+  trust: { title: "TRUST, RIGHTS & QA", center: [4.3, 3.1], accent: "#f59e0b", floor: "#f5efe2" }
 };
 const STATUS_COLORS = { working: "#42d6b1", waiting_input: "#f6b94a", idle: "#8391aa" };
 
 function Desk({ position, accent, compact = false }) {
   const width = compact ? 1.0 : 1.3;
   return <group position={position}>
-    <mesh position={[0, 0.48, 0]} castShadow receiveShadow><boxGeometry args={[width, 0.12, 0.72]} /><meshStandardMaterial color="#7c6b5d" roughness={0.8} /></mesh>
-    {[-0.42, 0.42].map((x) => <mesh key={x} position={[x, 0.22, 0]} castShadow><boxGeometry args={[0.08, 0.45, 0.62]} /><meshStandardMaterial color="#4b5563" /></mesh>)}
-    <mesh position={[0, 0.91, -0.18]} castShadow><boxGeometry args={[0.68, 0.46, 0.08]} /><meshStandardMaterial color="#172437" metalness={0.2} roughness={0.45} /></mesh>
+    <mesh position={[0, 0.48, 0]} castShadow receiveShadow><boxGeometry args={[width, 0.12, 0.72]} /><meshStandardMaterial color="#c7b9a7" roughness={0.8} /></mesh>
+    {[-0.42, 0.42].map((x) => <mesh key={x} position={[x, 0.22, 0]} castShadow><boxGeometry args={[0.08, 0.45, 0.62]} /><meshStandardMaterial color="#aab4c2" /></mesh>)}
+    <mesh position={[0, 0.91, -0.18]} castShadow><boxGeometry args={[0.68, 0.46, 0.08]} /><meshStandardMaterial color="#536178" metalness={0.2} roughness={0.45} /></mesh>
     <mesh position={[0, 0.92, -0.125]}><boxGeometry args={[0.57, 0.34, 0.012]} /><meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.22} /></mesh>
-    <mesh position={[0, 0.72, -0.15]}><boxGeometry args={[0.12, 0.08, 0.12]} /><meshStandardMaterial color="#64748b" /></mesh>
+    <mesh position={[0, 0.72, -0.15]}><boxGeometry args={[0.12, 0.08, 0.12]} /><meshStandardMaterial color="#aab4c2" /></mesh>
     <mesh position={[0.32, 0.57, 0.12]}><cylinderGeometry args={[0.07, 0.07, 0.025, 12]} /><meshStandardMaterial color="#d9c6a2" /></mesh>
   </group>;
 }
@@ -41,22 +41,22 @@ function Zone({ zone }) {
 
 function WaitingArea() {
   return <group position={[0, 0, 1.25]}>
-    <mesh position={[0, 0.18, 0]} castShadow><cylinderGeometry args={[1.45, 1.6, 0.22, 8]} /><meshStandardMaterial color="#35415a" /></mesh>
-    <mesh position={[0, 0.42, 0]} castShadow><cylinderGeometry args={[0.7, 0.82, 0.28, 8]} /><meshStandardMaterial color="#b38d69" /></mesh>
-    <mesh position={[0, 0.58, 0]}><cylinderGeometry args={[0.72, 0.72, 0.035, 8]} /><meshStandardMaterial color="#e2c8a2" /></mesh>
-    <mesh position={[-1.15, 0.42, 0]} castShadow><boxGeometry args={[0.55, 0.45, 0.7]} /><meshStandardMaterial color="#64748b" /></mesh>
-    <mesh position={[1.15, 0.42, 0]} castShadow><boxGeometry args={[0.55, 0.45, 0.7]} /><meshStandardMaterial color="#64748b" /></mesh>
+    <mesh position={[0, 0.18, 0]} castShadow><cylinderGeometry args={[1.45, 1.6, 0.22, 8]} /><meshStandardMaterial color="#dce2eb" /></mesh>
+    <mesh position={[0, 0.42, 0]} castShadow><cylinderGeometry args={[0.7, 0.82, 0.28, 8]} /><meshStandardMaterial color="#c9b49a" /></mesh>
+    <mesh position={[0, 0.58, 0]}><cylinderGeometry args={[0.72, 0.72, 0.035, 8]} /><meshStandardMaterial color="#f3e9d9" /></mesh>
+    <mesh position={[-1.15, 0.42, 0]} castShadow><boxGeometry args={[0.55, 0.45, 0.7]} /><meshStandardMaterial color="#aab4c2" /></mesh>
+    <mesh position={[1.15, 0.42, 0]} castShadow><boxGeometry args={[0.55, 0.45, 0.7]} /><meshStandardMaterial color="#aab4c2" /></mesh>
     <Html position={[0, 0.9, -0.9]} center distanceFactor={12} style={{ pointerEvents: "none" }}><div className="zone-label review-label">OWNER INPUT / REVIEW</div></Html>
   </group>;
 }
 
 function OfficeGround() {
   return <group>
-    <mesh position={[0, -0.12, 0]} receiveShadow><boxGeometry args={[25.2, 0.34, 17.2]} /><meshStandardMaterial color="#182238" roughness={0.95} /></mesh>
-    <mesh position={[0, 0.06, 0]} receiveShadow><boxGeometry args={[24.8, 0.025, 16.8]} /><meshStandardMaterial color="#202c42" roughness={0.9} /></mesh>
-    {Array.from({ length: 14 }).map((_, i) => <mesh key={"tile-x-" + i} position={[-11.5 + i * 1.75, 0.078, 0]}><boxGeometry args={[0.018, 0.008, 16.3]} /><meshStandardMaterial color="#344157" /></mesh>)}
-    {Array.from({ length: 9 }).map((_, i) => <mesh key={"tile-z-" + i} position={[0, 0.079, -7.0 + i * 1.75]}><boxGeometry args={[24.2, 0.008, 0.018]} /><meshStandardMaterial color="#344157" /></mesh>)}
-    <mesh position={[0, 0.19, -7.9]} castShadow><boxGeometry args={[9.0, 0.38, 0.32]} /><meshStandardMaterial color="#334155" /></mesh>
+    <mesh position={[0, -0.12, 0]} receiveShadow><boxGeometry args={[25.2, 0.34, 17.2]} /><meshStandardMaterial color="#e7ebf2" roughness={0.95} /></mesh>
+    <mesh position={[0, 0.06, 0]} receiveShadow><boxGeometry args={[24.8, 0.025, 16.8]} /><meshStandardMaterial color="#f7f8fb" roughness={0.9} /></mesh>
+    {Array.from({ length: 14 }).map((_, i) => <mesh key={"tile-x-" + i} position={[-11.5 + i * 1.75, 0.078, 0]}><boxGeometry args={[0.018, 0.008, 16.3]} /><meshStandardMaterial color="#dce2eb" /></mesh>)}
+    {Array.from({ length: 9 }).map((_, i) => <mesh key={"tile-z-" + i} position={[0, 0.079, -7.0 + i * 1.75]}><boxGeometry args={[24.2, 0.008, 0.018]} /><meshStandardMaterial color="#dce2eb" /></mesh>)}
+    <mesh position={[0, 0.19, -7.9]} castShadow><boxGeometry args={[9.0, 0.38, 0.32]} /><meshStandardMaterial color="#aab4c2" /></mesh>
     <mesh position={[0, 0.43, -7.71]}><boxGeometry args={[8.1, 0.045, 0.035]} /><meshStandardMaterial color="#9b8cff" emissive="#9b8cff" emissiveIntensity={0.6} /></mesh>
     <Html position={[0, 0.75, -7.65]} center distanceFactor={14} style={{ pointerEvents: "none" }}><div className="brand-sign">AURA <span>REVENUE OPERATIONS</span></div></Html>
   </group>;
@@ -88,8 +88,8 @@ function AgentCharacter({ agent, homePosition, workPosition, waitingPosition, se
     <mesh position={[0, 0.51, 0.02]}><boxGeometry args={[0.17, 0.2, 0.285]} /><meshStandardMaterial color="#e5e7eb" roughness={0.9} /></mesh>
     <group ref={armLeft} position={[-0.29, 0.93, 0]}><mesh position={[0, -0.19, 0]} rotation={[0, 0, -0.1]} castShadow><capsuleGeometry args={[0.095, 0.31, 3, 6]} /><meshStandardMaterial color={agent.color} /></mesh><mesh position={[0, -0.39, 0.025]}><sphereGeometry args={[0.085, 7, 6]} /><meshStandardMaterial color="#e4bda0" /></mesh></group>
     <group ref={armRight} position={[0.29, 0.93, 0]}><mesh position={[0, -0.19, 0]} rotation={[0, 0, 0.1]} castShadow><capsuleGeometry args={[0.095, 0.31, 3, 6]} /><meshStandardMaterial color={agent.color} /></mesh><mesh position={[0, -0.39, 0.025]}><sphereGeometry args={[0.085, 7, 6]} /><meshStandardMaterial color="#e4bda0" /></mesh></group>
-    <mesh position={[-0.12, 0.24, 0]} castShadow><boxGeometry args={[0.14, 0.42, 0.16]} /><meshStandardMaterial color="#334155" /></mesh>
-    <mesh position={[0.12, 0.24, 0]} castShadow><boxGeometry args={[0.14, 0.42, 0.16]} /><meshStandardMaterial color="#334155" /></mesh>
+    <mesh position={[-0.12, 0.24, 0]} castShadow><boxGeometry args={[0.14, 0.42, 0.16]} /><meshStandardMaterial color="#aab4c2" /></mesh>
+    <mesh position={[0.12, 0.24, 0]} castShadow><boxGeometry args={[0.14, 0.42, 0.16]} /><meshStandardMaterial color="#aab4c2" /></mesh>
     <mesh position={[-0.12, 0.035, 0.045]}><boxGeometry args={[0.19, 0.08, 0.25]} /><meshStandardMaterial color="#111827" /></mesh>
     <mesh position={[0.12, 0.035, 0.045]}><boxGeometry args={[0.19, 0.08, 0.25]} /><meshStandardMaterial color="#111827" /></mesh>
     <mesh position={[0, 1.31, 0.015]} castShadow><sphereGeometry args={[0.245, 10, 8]} /><meshStandardMaterial color="#e8bea0" roughness={0.85} /></mesh>
@@ -133,11 +133,11 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
   return <>
     <color attach="background" args={["#f4f6fb"]} />
     <fog attach="fog" args={["#f4f6fb", 28, 48]} />
-    <ambientLight intensity={1.35} />
-    <hemisphereLight args={["#dbeafe", "#263247", 1.15]} />
-    <directionalLight position={[8, 18, 10]} intensity={2.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-    <pointLight position={[-8, 6, -4]} intensity={30} color="#a78bfa" distance={15} />
-    <pointLight position={[6, 5, 4]} intensity={25} color="#38bdf8" distance={14} />
+    <ambientLight intensity={1.65} />
+    <hemisphereLight args={["#ffffff", "#d7deea", 1.35]} />
+    <directionalLight position={[8, 18, 10]} intensity={2.0} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+    <pointLight position={[-8, 6, -4]} intensity={12} color="#b5a7f4" distance={15} />
+    <pointLight position={[6, 5, 4]} intensity={10} color="#9bd8e9" distance={14} />
     <OfficeGround />
     {Object.entries(ZONE_LAYOUT).map(([key, zone]) => <Zone key={key} zone={zone} />)}
     <WaitingArea />
