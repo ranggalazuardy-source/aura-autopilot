@@ -245,6 +245,18 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("parsed.port", self.source)
         self.assertIn('raise HTTPException(422, "source URL is malformed")', self.source)
 
+    def test_content_cannot_self_clear_rights_on_creation(self):
+        content_model = self.source.split("class ContentItemIn", 1)[1].split("class ContentStatusIn", 1)[0]
+        self.assertNotIn("rights_status:", content_model)
+        self.assertIn("'needs_review', 'idea'", self.source)
+        self.assertIn('@app.post("/content/{content_id}/rights"', self.source)
+        self.assertIn("content.rights_", self.source)
+
+    def test_invalid_request_errors_are_sanitized_to_json_422(self):
+        self.assertIn("sanitize_validation_data", self.source)
+        self.assertIn("RequestValidationError", self.source)
+        self.assertIn("status_code=422", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
