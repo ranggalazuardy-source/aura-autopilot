@@ -1042,18 +1042,18 @@ async def score_opportunity(opportunity_id: str, payload: OpportunityScoreIn, db
     recommendation = recommendation_for_score(score, confidence, float(opportunity.estimated_cost))
     await db.prepare(
         """INSERT INTO opportunity_scores
-        (opportunity_id, dimensions_json, score, confidence, verified_sources, independent_publishers,
+        (opportunity_id, dimensions_json, score, confidence, verified_sources, distinct_publishers,
          recommendation, rationale, scored_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(opportunity_id) DO UPDATE SET dimensions_json=excluded.dimensions_json,
         score=excluded.score, confidence=excluded.confidence, verified_sources=excluded.verified_sources,
-        independent_publishers=excluded.independent_publishers, recommendation=excluded.recommendation,
+        distinct_publishers=excluded.distinct_publishers, recommendation=excluded.recommendation,
         rationale=excluded.rationale, scored_at=excluded.scored_at"""
     ).bind(opportunity_id, json.dumps(dimensions), score, confidence, verified, publishers,
            recommendation, payload.rationale, now_iso()).run()
     await write_audit(db, "opportunity.scored", opportunity_id, recommendation)
     return {"opportunity_id": opportunity_id, "score": score, "confidence": confidence,
-            "verified_sources": verified, "independent_publishers": publishers,
+            "verified_sources": verified, "distinct_publishers": publishers,
             "recommendation": recommendation, "dimensions": dimensions,
             "note": "Score is decision support, not a guarantee of revenue."}
 
@@ -1062,7 +1062,7 @@ async def score_opportunity(opportunity_id: str, payload: OpportunityScoreIn, db
 async def list_opportunity_scores(db=Depends(get_db)):
     result = await db.prepare(
         """SELECT o.id, o.title, o.channel, o.estimated_cost, o.estimated_revenue, o.risk_level,
-        s.dimensions_json, s.score, s.confidence, s.verified_sources, s.independent_publishers,
+        s.dimensions_json, s.score, s.confidence, s.verified_sources, s.distinct_publishers,
         s.recommendation, s.rationale, s.scored_at
         FROM opportunity_scores s JOIN opportunities o ON o.id = s.opportunity_id
         ORDER BY s.score DESC, s.confidence DESC LIMIT 200"""
@@ -1076,7 +1076,7 @@ async def compare_opportunities(payload: MarketCompareIn, db=Depends(get_db)):
     for opportunity_id in payload.opportunity_ids:
         row = await db.prepare(
             """SELECT o.id, o.title, o.channel, o.rationale, o.estimated_cost, o.estimated_revenue,
-            o.risk_level, s.score, s.confidence, s.verified_sources, s.independent_publishers,
+            o.risk_level, s.score, s.confidence, s.verified_sources, s.distinct_publishers,
             s.recommendation FROM opportunities o LEFT JOIN opportunity_scores s ON s.opportunity_id=o.id
             WHERE o.id = ?"""
         ).bind(opportunity_id).first()
@@ -1084,7 +1084,7 @@ async def compare_opportunities(payload: MarketCompareIn, db=Depends(get_db)):
             raise HTTPException(404, "opportunity not found: " + opportunity_id)
         rows.append({key: getattr(row, key, None) for key in [
             "id","title","channel","rationale","estimated_cost","estimated_revenue","risk_level",
-            "score","confidence","verified_sources","independent_publishers","recommendation"]})
+            "score","confidence","verified_sources","distinct_publishers","recommendation"]})
     rows.sort(key=lambda item: (item["score"] if item["score"] is not None else -1,
                                item["confidence"] if item["confidence"] is not None else -1), reverse=True)
     comparison_id = uuid4().hex
