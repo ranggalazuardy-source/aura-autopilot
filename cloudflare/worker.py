@@ -429,14 +429,14 @@ async def list_approvals(db=Depends(get_db)):
 async def decide_approval(approval_id: str, decision: str, db=Depends(get_db)):
     if decision not in {"approved", "rejected"}:
         raise HTTPException(400, "decision must be approved or rejected")
-    existing = await db.prepare("SELECT id, status FROM approvals WHERE id = ?").bind(approval_id).first()
-    if existing is None:
-        raise HTTPException(404, "approval not found")
-    if existing.status != "pending":
+    changed = await db.prepare(
+        "UPDATE approvals SET status = ? WHERE id = ? AND status = 'pending' RETURNING id"
+    ).bind(decision, approval_id).first()
+    if changed is None:
+        existing = await db.prepare("SELECT id, status FROM approvals WHERE id = ?").bind(approval_id).first()
+        if existing is None:
+            raise HTTPException(404, "approval not found")
         raise HTTPException(409, "approval already decided")
-    await db.prepare("UPDATE approvals SET status = ? WHERE id = ? AND status = 'pending'").bind(
-        decision, approval_id
-    ).run()
     await write_audit(db, "approval." + decision, approval_id, "")
     return {"id": approval_id, "status": decision, "execution": "not_executed"}
 
@@ -498,16 +498,30 @@ async def list_content_items(db=Depends(get_db)):
 
 @app.post("/content/{content_id}/status", dependencies=[Depends(require_api_key)])
 async def update_content_status(content_id: str, payload: ContentStatusIn, db=Depends(get_db)):
-    existing = await db.prepare("SELECT id, status FROM content_items WHERE id = ?").bind(content_id).first()
+    existing = await db.prepare(
+        "SELECT id, status, rights_status FROM content_items WHERE id = ?"
+    ).bind(content_id).first()
     if existing is None:
         raise HTTPException(404, "content item not found")
-    if payload.status == "approved":
-        item = await db.prepare("SELECT rights_status FROM content_items WHERE id = ?").bind(content_id).first()
-        if item.rights_status != "cleared":
+    allowed_transitions = {
+        "idea": {"draft", "paused"},
+        "draft": {"in_review", "paused"},
+        "in_review": {"draft", "approved", "paused"},
+        "approved": {"published", "paused"},
+        "published": {"paused"},
+        "paused": {"draft", "in_review"},
+    }
+    if payload.status not in allowed_transitions.get(existing.status, set()):
+        raise HTTPException(409, "invalid content status transition")
+    changed = await db.prepare(
+        """UPDATE content_items SET status = ?, updated_at = ?
+        WHERE id = ? AND status = ? AND (? != 'approved' OR rights_status = 'cleared')
+        RETURNING id"""
+    ).bind(payload.status, now_iso(), content_id, existing.status, payload.status).first()
+    if changed is None:
+        if payload.status == "approved":
             raise HTTPException(409, "content rights must be cleared before approval")
-    await db.prepare("UPDATE content_items SET status = ?, updated_at = ? WHERE id = ?").bind(
-        payload.status, now_iso(), content_id
-    ).run()
+        raise HTTPException(409, "content status changed; refresh before retrying")
     await write_audit(db, "content.status_changed", content_id, payload.status)
     return {"id": content_id, "status": payload.status, "publishing": "not_automated"}
 
@@ -1045,13 +1059,20 @@ async def list_registered_tools():
 @app.post("/agent-tasks/claim-next", dependencies=[Depends(require_api_key)])
 async def claim_next_agent_task(payload: AgentTaskClaimIn, db=Depends(get_db)):
     now = int(datetime.now(timezone.utc).timestamp())
-    # Recover both expired leases and tasks orphaned before their lease row was written.
+    # Expired leases are reclaimed immediately. A task with no lease gets a grace
+    # period so concurrent claim requests cannot steal it between status update and lease insert.
+    orphan_cutoff = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat()
     await db.prepare(
         """UPDATE agent_tasks SET status = 'queued', updated_at = ?
-        WHERE status = 'in_progress' AND NOT EXISTS
-        (SELECT 1 FROM task_execution_leases l
-         WHERE l.task_id = agent_tasks.id AND l.expires_at > ?)"""
-    ).bind(now_iso(), now).run()
+        WHERE status = 'in_progress' AND (
+            EXISTS (SELECT 1 FROM task_execution_leases expired
+                    WHERE expired.task_id = agent_tasks.id AND expired.expires_at <= ?)
+            OR (updated_at <= ? AND NOT EXISTS (
+                SELECT 1 FROM task_execution_leases missing
+                WHERE missing.task_id = agent_tasks.id
+            ))
+        )"""
+    ).bind(now_iso(), now, orphan_cutoff).run()
     await db.prepare("DELETE FROM task_execution_leases WHERE expires_at <= ?").bind(now).run()
     task = await db.prepare(
         """UPDATE agent_tasks SET status = 'in_progress', updated_at = ?
@@ -1462,9 +1483,12 @@ async def verify_research_source(source_id: str, payload: ResearchSourceVerifyIn
         raise HTTPException(404, "research source not found")
     if source.verification_status != "unverified":
         raise HTTPException(409, "source has already received a verification decision")
-    await db.prepare(
-        "UPDATE research_sources SET verification_status = ?, reviewer_notes = ? WHERE id = ?"
-    ).bind(payload.status, payload.reviewer_notes, source_id).run()
+    changed = await db.prepare(
+        """UPDATE research_sources SET verification_status = ?, reviewer_notes = ?
+        WHERE id = ? AND verification_status = 'unverified' RETURNING id"""
+    ).bind(payload.status, payload.reviewer_notes, source_id).first()
+    if changed is None:
+        raise HTTPException(409, "source has already received a verification decision")
     await write_audit(db, "research.source_" + payload.status, source_id, payload.reviewer_notes)
     return {"id": source_id, "verification_status": payload.status, "verification_method": "authenticated_manual_review"}
 
