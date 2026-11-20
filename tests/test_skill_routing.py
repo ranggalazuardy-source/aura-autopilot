@@ -195,5 +195,17 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("logs", frontend)
 
 
+    def test_root_landing_links_both_apps_on_one_origin(self):
+        self.assertIn('@app.get("/", response_class=HTMLResponse, include_in_schema=False)', self.source)
+        self.assertIn('href="/dashboard"', self.source)
+        self.assertIn('href="/office/"', self.source)
+
+    def test_office_api_path_is_routed_to_worker_before_static_assets(self):
+        import json
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn("/office/state*", config["assets"]["run_worker_first"])
+        self.assertTrue(config["workers_dev"])
+
+
 if __name__ == "__main__":
     unittest.main()
