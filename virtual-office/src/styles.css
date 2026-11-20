@@ -21,7 +21,7 @@
 .agent-notice.waiting_input{border-color:#f2dfb8;background:rgba(255,250,239,.97)}.agent-notice.waiting_input strong{color:#a36d16}
 @media(max-width:850px){
 .office-app{padding:8px;min-height:100svh}.topbar{gap:8px;padding-bottom:8px}.topbar-actions{gap:5px}.metrics-row{margin:8px 0;gap:6px}.metric-card{padding:8px 10px}.office-layout{gap:8px}
-.scene-panel{min-height:0;height:auto}.scene-canvas-wrap{flex:none;width:100%;height:auto;min-height:0;aspect-ratio:9/16;max-height:calc(100svh - 210px);border-radius:13px}
+.scene-panel{min-height:0;height:auto}.scene-canvas-wrap{flex:none;width:min(100%,calc((100svh - 190px)*.5625));height:auto;margin-inline:auto;min-height:0;aspect-ratio:9/16;max-height:none;border-radius:13px}
 .scene-canvas-wrap canvas{width:100%!important;height:100%!important;min-height:0!important;touch-action:pan-y}
 .scene-heading{top:10px;left:11px;right:11px}.scene-heading h2{font-size:13px}.scene-controls{top:52px;right:8px}.scene-controls button{width:32px;height:32px}
 .scene-legend{left:7px;bottom:7px;gap:6px;padding:6px 7px}.scene-legend span{font-size:7px}.scene-gesture-hint{right:7px;bottom:7px;font-size:7px}.runtime-note{display:none}.side-panel{max-height:none;min-height:0}
@@ -29,7 +29,7 @@
 @media(max-width:520px){
 .office-app{padding:7px}.topbar{min-height:0}.topbar h1{font-size:15px}.brand-mark.small{width:32px;height:32px}.topbar-actions .last-sync{display:none}
 .metrics-row{grid-template-columns:repeat(4,minmax(0,1fr))}.metric-card{padding:7px 6px}.metric-card span{font-size:6px;letter-spacing:.04em}.metric-card strong{font-size:18px}.metric-card small{font-size:7px;line-height:1.2}
-.scene-canvas-wrap{max-height:calc(100svh - 175px)}.scene-hint{display:none}
+.scene-canvas-wrap{max-height:none}.scene-hint{display:none}
 .agent-notice{width:clamp(86px,25vw,112px);padding:5px 5px 6px;border-radius:7px}.agent-notice strong{font-size:6px}.agent-notice span{font-size:7px}.agent-scene-tag{font-size:7px;padding:3px 5px}
 .scene-legend{max-width:75%;flex-wrap:wrap}.scene-gesture-hint{display:none}
 }
