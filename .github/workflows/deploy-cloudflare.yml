@@ -78,6 +78,8 @@ jobs:
         run: |
           python -m compileall -q app cloudflare
           uv run python -m unittest discover -s tests -v
+      - name: Validate Worker bundle before changing Cloudflare resources
+        run: uv run pywrangler deploy --dry-run
 
       - name: Provision or reuse D1 database
         id: d1
@@ -158,6 +160,19 @@ jobs:
 
           echo "Checking $WORKER_URL"
           curl --fail --silent --show-error "$WORKER_URL/health" -o /tmp/aura-health.json
+          node -e 'const h=JSON.parse(require("fs").readFileSync("/tmp/aura-health.json","utf8")); if(h.ok!==true) process.exit(1)'
+          curl --fail --silent --show-error "$WORKER_URL/openapi.json" -o /tmp/aura-openapi.json
+          node -e 'const s=JSON.parse(require("fs").readFileSync("/tmp/aura-openapi.json","utf8")); const key=Object.values(s.components?.securitySchemes||{}).find(x=>x.type==="apiKey"&&x.in==="header"&&x.name==="X-AURA-API-Key"); if(!key) process.exit(1)'
+          UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-unauthorized.json -w '%{http_code}' "$WORKER_URL/opportunities")"
+          if [[ "$UNAUTH_STATUS" != "401" ]]; then
+            echo "::error::Expected unauthenticated /opportunities to return 401, got $UNAUTH_STATUS"
+            exit 1
+          fi
+          OFFICE_UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-office-unauthorized.json -w '%{http_code}' "$WORKER_URL/office/state")"
+          if [[ "$OFFICE_UNAUTH_STATUS" != "401" ]]; then
+            echo "::error::Expected unauthenticated /office/state to return 401, got $OFFICE_UNAUTH_STATUS"
+            exit 1
+          fi
           curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html
           grep -q "AURA" /tmp/aura-root.html
           curl --fail --silent --show-error "$WORKER_URL/dashboard" -o /tmp/aura-dashboard.html
