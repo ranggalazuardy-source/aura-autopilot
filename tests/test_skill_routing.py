@@ -270,6 +270,22 @@ class SkillRoutingTests(unittest.TestCase):
     def test_research_source_verification_is_one_time_atomic_update(self):
         self.assertIn("WHERE id = ? AND verification_status = 'unverified' RETURNING id", self.source)
 
+    def test_closed_research_runs_reject_manual_source_ingestion(self):
+        handler = self.source.split("async def add_research_source", 1)[1].split(
+            '@app.get("/research/sources"', 1
+        )[0]
+        self.assertIn("SELECT id, status FROM research_runs", handler)
+        self.assertIn('run.status != "collecting"', handler)
+        self.assertIn("research run is not accepting new sources", handler)
+
+    def test_upstream_search_http_failures_are_logged(self):
+        handler = self.source.split("async def search_research_web", 1)[1].split(
+            '@app.post("/research/runs"', 1
+        )[0]
+        self.assertIn("except HTTPException as exc", handler)
+        self.assertIn('"failed"', handler)
+        self.assertIn("research.web_search_failed", handler)
+
     def test_worker_auth_failures_use_cloudflare_rate_limit_binding(self):
         self.assertIn('getattr(env, "AURA_AUTH_RATE_LIMITER", None)', self.source)
         self.assertIn('await limiter.limit({"key": str(client_ip)})', self.source)
