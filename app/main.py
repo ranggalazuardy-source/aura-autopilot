@@ -4,6 +4,8 @@ import os
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -67,6 +69,25 @@ class AuditLog(Base):
 Base.metadata.create_all(bind=engine)
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
 app = FastAPI(title="AURA — Local Development API", version="0.2.0")
+
+def sanitize_validation_data(value):
+    if isinstance(value, float) and not __import__("math").isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): sanitize_validation_data(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitize_validation_data(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": sanitize_validation_data(exc.errors())},
+    )
 cors_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
