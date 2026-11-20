@@ -206,6 +206,13 @@ jobs:
           fi
           # Public OpenAPI/docs are intentionally disabled in production. Verify the
           # real API auth boundary directly instead of invoking schema generation.
+          for docs_path in openapi.json docs redoc; do
+            docs_status="$(curl --silent --show-error -o /dev/null -w '%{http_code}' "$WORKER_URL/$docs_path")"
+            if [[ "$docs_status" != "404" ]]; then
+              echo "::error::Expected production docs route /$docs_path to be disabled (404), got $docs_status"
+              exit 1
+            fi
+          done
           UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-unauthorized.json -w '%{http_code}' "$WORKER_URL/opportunities")"
           if [[ "$UNAUTH_STATUS" != "401" ]]; then
             echo "::error::Expected unauthenticated /opportunities to return 401, got $UNAUTH_STATUS"
