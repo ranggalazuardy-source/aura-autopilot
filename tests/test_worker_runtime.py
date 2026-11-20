@@ -55,6 +55,16 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertEqual(namespace["d1_rows"](Result(Proxy())), [{"id": "proxy"}])
         self.assertEqual(namespace["d1_rows"](Result(None)), [])
 
+
+    def test_scheduler_is_registered_but_disabled_by_default(self):
+        self.assertIn("from workers import asgi, handler", SOURCE)
+        self.assertIn("@handler", SOURCE)
+        self.assertIn("async def on_scheduled(event, env, ctx):", SOURCE)
+        self.assertIn('"AURA_SCHEDULER_ENABLED": "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"crons": ["*/15 * * * *"]', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"task_dispatch_enabled": False', SOURCE)
+        self.assertIn('"model_provider_enabled": False', SOURCE)
+
     def test_worker_runtime_dependencies_are_pinned(self):
         import tomllib
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
