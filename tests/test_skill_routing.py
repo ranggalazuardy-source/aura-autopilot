@@ -171,7 +171,7 @@ class SkillRoutingTests(unittest.TestCase):
                     if isinstance(target, ast.Name) and target.id == "AGENT_OFFICE_PROFILES":
                         profiles = ast.literal_eval(node.value)
         self.assertEqual(set(profiles), set(self.assignments["AGENT_SKILLS"]))
-        self.assertEqual(len(profiles), 15)
+        self.assertEqual(len(profiles), 20)
         self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "studio", "finance", "trust"})
 
     def test_virtual_office_state_uses_live_tasks_leases_and_audit_logs(self):
