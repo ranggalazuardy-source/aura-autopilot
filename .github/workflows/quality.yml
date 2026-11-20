@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           db = sqlite3.connect(":memory:")
           db.executescript(Path("cloudflare/schema.sql").read_text(encoding="utf-8"))
-          expected = {"opportunities", "approvals", "ledger", "audit_log", "agent_tasks", "task_skill_routes", "task_execution_leases", "task_execution_artifacts", "research_runs", "research_sources", "opportunity_scores", "market_comparisons", "ceo_decisions"}
+          expected = {"opportunities", "approvals", "ledger", "audit_log", "agent_tasks", "task_skill_routes", "task_execution_leases", "task_execution_artifacts", "research_runs", "research_sources", "opportunity_scores", "market_comparisons", "ceo_decisions", "research_search_logs"}
           actual = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           missing = expected - actual
           assert not missing, f"Missing tables: {sorted(missing)}"
