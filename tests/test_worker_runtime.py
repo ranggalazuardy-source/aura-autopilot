@@ -33,6 +33,28 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn("sanitize_validation_data", SOURCE)
         self.assertIn("add_security_headers", SOURCE)
 
+
+    def test_d1_rows_supports_native_lists_and_pyodide_proxies(self):
+        helper = next(
+            node for node in TREE.body
+            if isinstance(node, ast.FunctionDef) and node.name == "d1_rows"
+        )
+        namespace = {}
+        module = ast.Module(body=[helper], type_ignores=[])
+        exec(compile(module, str(SOURCE_PATH), "exec"), namespace)
+
+        class Result:
+            def __init__(self, rows):
+                self.results = rows
+
+        class Proxy:
+            def to_py(self):
+                return [{"id": "proxy"}]
+
+        self.assertEqual(namespace["d1_rows"](Result([{"id": "native"}])), [{"id": "native"}])
+        self.assertEqual(namespace["d1_rows"](Result(Proxy())), [{"id": "proxy"}])
+        self.assertEqual(namespace["d1_rows"](Result(None)), [])
+
     def test_worker_runtime_dependencies_are_pinned(self):
         import tomllib
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
