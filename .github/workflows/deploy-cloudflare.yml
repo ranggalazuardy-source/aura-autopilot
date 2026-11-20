@@ -168,10 +168,14 @@ jobs:
             -H "X-AURA-API-Key: $AURA_API_KEY" \
             "$WORKER_URL/office/state" > /tmp/aura-office-state.json
 
-# Verify the dashboard's core authenticated data endpoints, not only the virtual office.
-for endpoint in opportunities approvals content ledger ledger/summary; do
-  curl --fail --silent --show-error -H "X-AURA-API-Key: $AURA_API_KEY" "$WORKER_URL/$endpoint" -o "/tmp/aura-${endpoint//\//-}.json"
-done
+          # Verify the dashboard's core authenticated data endpoints, not only the virtual office.
+          for endpoint in opportunities approvals content ledger ledger/summary; do
+            response_file="/tmp/aura-${endpoint//\//-}.json"
+            echo "Checking authenticated endpoint: /$endpoint"
+            curl --fail --silent --show-error \
+              -H "X-AURA-API-Key: $AURA_API_KEY" \
+              "$WORKER_URL/$endpoint" -o "$response_file"
+          done
 
           echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
           {
