@@ -65,6 +65,25 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn('"task_dispatch_enabled": False', SOURCE)
         self.assertIn('"model_provider_enabled": False', SOURCE)
 
+
+    def test_model_provider_integration_is_disabled_and_fail_closed(self):
+        self.assertIn('AURA_MODEL_ENABLED: "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED: "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"binding": "AI"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('CLOUDFLARE_FREE_MODEL = "@cf/zai-org/glm-4.7-flash"', SOURCE)
+        self.assertIn('GROQ_FREE_MODEL = "openai/gpt-oss-120b"', SOURCE)
+        self.assertIn("MAX_MODEL_CALLS_PER_UTC_DAY = 5", SOURCE)
+        self.assertIn("Owner must confirm the Cloudflare Workers Free plan", SOURCE)
+        self.assertIn("no fallback was attempted", SOURCE)
+        self.assertIn('async def execute_agent_task(', SOURCE)
+
+    def test_model_execution_requires_task_lease_and_owner_flags(self):
+        self.assertIn('await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)', SOURCE)
+        self.assertIn('if not _truthy_env(env, "AURA_MODEL_ENABLED"):', SOURCE)
+        self.assertIn('if not _truthy_env(env, "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED"):', SOURCE)
+        self.assertIn('if not _truthy_env(env, "AURA_GROQ_ENABLED"):', SOURCE)
+        self.assertIn("CREATE TABLE IF NOT EXISTS model_usage_daily", (ROOT / "cloudflare" / "schema.sql").read_text(encoding="utf-8"))
+
     def test_guarded_agent_console_is_registered_and_linked_from_dashboard(self):
         self.assertIn('AGENT_CONSOLE =', SOURCE)
         self.assertIn('@app.get("/agents", response_class=HTMLResponse', SOURCE)
