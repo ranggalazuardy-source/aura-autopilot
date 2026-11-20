@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build React Three Fiber virtual office
+        run: npm install --prefix virtual-office --no-audit --no-fund && npm run build --prefix virtual-office
       - name: Compile Python sources
         run: python -m compileall -q app cloudflare
       - name: Run skill routing tests
