@@ -83,6 +83,29 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn("no fallback was attempted", SOURCE)
         self.assertIn('async def execute_agent_task(', SOURCE)
 
+    def test_provider_fallback_policy_is_fail_closed_and_order_bounded(self):
+        helper = next(
+            node for node in TREE.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_should_failover_provider"
+        )
+        namespace = {"_is_quota_exhaustion": lambda value: "quota" in str(value).lower()}
+        module = ast.Module(body=[helper], type_ignores=[])
+        exec(compile(module, str(SOURCE_PATH), "exec"), namespace)
+
+        class Failure:
+            def __init__(self, status_code, detail):
+                self.status_code = status_code
+                self.detail = detail
+
+        should_failover = namespace["_should_failover_provider"]
+        self.assertTrue(should_failover(Failure(429, "rate limit"), "auto", 0, 3))
+        self.assertTrue(should_failover(Failure(503, "upstream unavailable"), "auto", 1, 3))
+        self.assertFalse(should_failover(Failure(401, "invalid API key"), "auto", 0, 3))
+        self.assertFalse(should_failover(Failure(402, "billing required"), "auto", 0, 3))
+        self.assertFalse(should_failover(Failure(422, "invalid request"), "auto", 0, 3))
+        self.assertFalse(should_failover(Failure(429, "quota exceeded"), "groq", 0, 3))
+        self.assertFalse(should_failover(Failure(503, "upstream unavailable"), "auto", 2, 3))
+
     def test_model_execution_requires_task_lease_and_owner_flags(self):
         self.assertIn('await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)', SOURCE)
         self.assertIn('if not _truthy_env(env, "AURA_MODEL_ENABLED"):', SOURCE)
