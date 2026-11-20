@@ -21,10 +21,10 @@ The D1 migration in `cloudflare/schema.sql` must be applied to the Cloudflare D1
 
 ## Next implementation stage
 
-1. Add a controlled prompt/context assembler that retrieves approved skill instructions.
-2. Add a model provider adapter with explicit per-agent tool allowlists.
-3. Add execution leases, retries, idempotency and bounded task budgets.
-4. Keep compliance, QA and owner approval gates outside the executing agent's control.
+1. Connect an owner-approved model provider with a strict per-task IDR cost ceiling.
+2. Add read-only research connectors with source capture and rate limits.
+3. Add QA review workflows and artifact inspection.
+4. Add a supervised worker process and bounded retry policy.
 5. Add integration tests against a staging D1 database before production deployment.
 
 
