@@ -157,10 +157,12 @@ jobs:
           fi
 
           echo "Checking $WORKER_URL"
-          curl --fail --silent --show-error "$WORKER_URL/health" | tee /tmp/aura-health.json
-          curl --fail --silent --show-error "$WORKER_URL/" | grep -q "Operations Dashboard"
-          curl --fail --silent --show-error "$WORKER_URL/dashboard" | grep -q "AURA"
-          curl --fail --silent --show-error "$WORKER_URL/office/" | grep -q "Virtual AI Office"
+          curl --fail --silent --show-error "$WORKER_URL/health" -o /tmp/aura-health.json
+          grep -q "Operations Dashboard" <(curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html && cat /tmp/aura-root.html)
+          curl --fail --silent --show-error "$WORKER_URL/dashboard" -o /tmp/aura-dashboard.html
+          grep -q "AURA" /tmp/aura-dashboard.html
+          curl --fail --silent --show-error "$WORKER_URL/office/" -o /tmp/aura-office.html
+          grep -q "Virtual AI Office" /tmp/aura-office.html
           curl --fail --silent --show-error \
             -H "X-AURA-API-Key: $AURA_API_KEY" \
             "$WORKER_URL/office/state" > /tmp/aura-office-state.json
