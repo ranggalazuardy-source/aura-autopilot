@@ -238,7 +238,7 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("math.isfinite(float(value))", self.source)
 
     def test_office_completion_metric_uses_jakarta_calendar_day(self):
-        self.assertIn('ZoneInfo("Asia/Jakarta")', self.source)
+        self.assertIn('timezone(timedelta(hours=7))', self.source)
         self.assertIn("updated.astimezone(jakarta_tz).date()", self.source)
 
     def test_research_source_url_rejects_malformed_ports(self):
