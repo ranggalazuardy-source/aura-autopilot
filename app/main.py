@@ -3,7 +3,8 @@ import hmac
 import os
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, select, update, String, Float, DateTime, Text
@@ -64,6 +65,7 @@ class AuditLog(Base):
 
 
 Base.metadata.create_all(bind=engine)
+API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
 app = FastAPI(title="AURA — Local Development API", version="0.2.0")
 cors_origins = [
     origin.strip()
@@ -79,9 +81,7 @@ app.add_middleware(
 )
 
 
-async def require_api_key(
-    x_aura_api_key: str | None = Header(default=None, alias="X-AURA-API-Key"),
-):
+async def require_api_key(x_aura_api_key: str | None = Depends(API_KEY_HEADER)):
     expected = os.getenv("AURA_API_KEY", "")
     if not expected:
         raise HTTPException(status_code=503, detail="AURA_API_KEY is not configured")
