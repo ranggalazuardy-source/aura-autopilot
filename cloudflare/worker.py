@@ -2,6 +2,10 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import hmac
 import json
+import re
+from html import unescape
+from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlencode
 import ipaddress
 from urllib.parse import urlsplit
 
@@ -86,6 +90,12 @@ class ContentItemIn(BaseModel):
 
 class ContentStatusIn(BaseModel):
     status: str = Field(pattern="^(idea|draft|in_review|approved|published|paused)$")
+
+class ResearchSearchIn(BaseModel):
+    run_id: str = Field(min_length=8, max_length=64)
+    query: str = Field(min_length=3, max_length=300)
+    max_results: int = Field(default=8, ge=1, le=10)
+
 
 class ResearchRunIn(BaseModel):
     agent: str = Field(default="Market Intelligence", min_length=2, max_length=80)
@@ -939,6 +949,121 @@ def recommendation_for_score(score: float, confidence: float, estimated_cost: fl
     if score >= 55 and confidence >= 35:
         return "collect_more_evidence"
     return "deprioritize"
+
+
+
+class DuckDuckGoHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self.current = None
+        self.capture = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = attrs.get("class", "").split()
+        if tag == "a" and "result__a" in classes:
+            self.current = {"href": attrs.get("href", ""), "title": "", "snippet": ""}
+            self.results.append(self.current)
+            self.capture = "title"
+        elif self.current is not None and tag in {"div", "a"} and "result__snippet" in classes:
+            self.capture = "snippet"
+
+    def handle_data(self, data):
+        if self.current is not None and self.capture in {"title", "snippet"}:
+            self.current[self.capture] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.capture == "title":
+            self.capture = None
+        elif tag == "div" and self.capture == "snippet":
+            self.capture = None
+
+
+def normalize_search_result_url(value: str):
+    parsed = urlsplit(value)
+    if parsed.hostname and parsed.hostname.endswith("duckduckgo.com"):
+        target = parse_qs(parsed.query).get("uddg", [""])[0]
+        if target:
+            value = target
+    return value
+
+
+@app.get("/research/provider", dependencies=[Depends(require_api_key)])
+async def research_provider_status():
+    return {
+        "provider": "DuckDuckGo HTML",
+        "mode": "public_html_search",
+        "configured": True,
+        "api_key_required": False,
+        "paid_api": False,
+        "automatic_source_verification": False,
+        "note": "Search results are discovery leads; source excerpts remain unverified until manual review.",
+    }
+
+
+@app.post("/research/search", dependencies=[Depends(require_api_key)])
+async def search_research_web(payload: ResearchSearchIn, db=Depends(get_db)):
+    run = await db.prepare("SELECT id, status FROM research_runs WHERE id = ?").bind(payload.run_id).first()
+    if run is None:
+        raise HTTPException(404, "research run not found")
+    if run.status != "collecting":
+        raise HTTPException(409, "research run is not accepting new sources")
+    recent = await db.prepare(
+        "SELECT COUNT(*) AS total FROM research_search_logs WHERE created_at >= ?"
+    ).bind((datetime.now(timezone.utc).replace(microsecond=0) - __import__("datetime").timedelta(minutes=10)).isoformat()).first()
+    if int(recent.total or 0) >= 10:
+        raise HTTPException(429, "AURA research search rate limit reached: 10 queries per 10 minutes")
+    log_id = uuid4().hex
+    try:
+        from js import fetch
+        search_url = "https://html.duckduckgo.com/html/?" + urlencode({"q": payload.query})
+        response = await fetch(search_url, {"headers": {"User-Agent": "AURAResearch/0.8 (owner-initiated public market research)"}})
+        if not response.ok:
+            raise HTTPException(502, "search provider returned HTTP " + str(response.status))
+        html = await response.text()
+        parser = DuckDuckGoHTMLParser()
+        parser.feed(html)
+        added = []
+        for item in parser.results:
+            if len(added) >= payload.max_results:
+                break
+            title = unescape(re.sub(r"\s+", " ", item["title"])).strip()
+            excerpt = unescape(re.sub(r"\s+", " ", item["snippet"])).strip()
+            url = normalize_search_result_url(item["href"])
+            try:
+                parsed = validate_public_https_url(url)
+            except HTTPException:
+                continue
+            if not title or not parsed.hostname:
+                continue
+            source_id = uuid4().hex
+            publisher = parsed.hostname.lower().removeprefix("www.")
+            digest = __import__("hashlib").sha256((url + "\n" + excerpt).encode("utf-8")).hexdigest()
+            await db.prepare(
+                """INSERT INTO research_sources
+                (id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
+                 excerpt, content_hash, verification_status, reviewer_notes, created_at)
+                VALUES (?, ?, NULL, ?, ?, ?, 'other', '', ?, ?, 'unverified', '', ?)"""
+            ).bind(source_id, payload.run_id, title[:300], url[:2000], publisher[:200],
+                   excerpt[:5000], digest, now_iso()).run()
+            added.append({"id": source_id, "title": title, "url": url, "publisher": publisher,
+                          "excerpt": excerpt, "verification_status": "unverified"})
+        await db.prepare(
+            "INSERT INTO research_search_logs (id, run_id, provider, query, status, result_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(log_id, payload.run_id, "duckduckgo_html", payload.query, "completed", len(added), now_iso()).run()
+        await write_audit(db, "research.web_search_completed", payload.run_id, str(len(added)) + " results")
+        return {"run_id": payload.run_id, "provider": "DuckDuckGo HTML", "query": payload.query,
+                "result_count": len(added), "sources": added,
+                "verification_status": "unverified"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.prepare(
+            "INSERT INTO research_search_logs (id, run_id, provider, query, status, result_count, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)"
+        ).bind(log_id, payload.run_id, "duckduckgo_html", payload.query, "failed", now_iso()).run()
+        await write_audit(db, "research.web_search_failed", payload.run_id, type(exc).__name__)
+        raise HTTPException(502, "research search provider unavailable: " + type(exc).__name__)
 
 
 @app.post("/research/runs", dependencies=[Depends(require_api_key)])
