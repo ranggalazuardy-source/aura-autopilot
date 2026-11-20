@@ -100,6 +100,46 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('"qa_status": "pending_review"', self.source)
         self.assertIn('"permission": "local_pure"', self.source)
 
+
+    def test_research_intelligence_tables_exist(self):
+        for table in ["research_runs", "research_sources", "opportunity_scores", "market_comparisons", "ceo_decisions"]:
+            with self.subTest(table=table):
+                self.assertIn("CREATE TABLE IF NOT EXISTS " + table, self.schema)
+
+    def test_research_endpoints_are_present(self):
+        for route in [
+            '@app.post("/research/runs"',
+            '@app.get("/research/runs"',
+            '@app.post("/research/runs/{run_id}/close"',
+            '@app.post("/research/sources"',
+            '@app.get("/research/sources"',
+            '@app.post("/research/sources/{source_id}/verify"',
+            '@app.post("/opportunities/{opportunity_id}/score"',
+            '@app.get("/opportunities/scores"',
+            '@app.post("/research/compare"',
+            '@app.get("/research/compare/{comparison_id}"',
+            '@app.get("/ceo/recommendation/{comparison_id}"',
+            '@app.post("/ceo/decisions"',
+        ]:
+            with self.subTest(route=route):
+                self.assertIn(route, self.source)
+
+    def test_scoring_is_transparent_and_zero_capital_guarded(self):
+        self.assertIn("SCORE_WEIGHTS", self.source)
+        self.assertIn("def score_opportunity_dimensions", self.source)
+        self.assertIn("def recommendation_for_score", self.source)
+        self.assertIn('"hold_for_owner_cost_approval"', self.source)
+        self.assertIn('"recommend_zero_cost_pilot"', self.source)
+
+    def test_research_source_intake_does_not_claim_automatic_verification(self):
+        self.assertIn('"verification_status": "unverified"', self.source)
+        self.assertIn('"verification_method": "authenticated_manual_review"', self.source)
+        self.assertIn("def validate_public_https_url", self.source)
+
+    def test_ceo_decision_never_executes_actions(self):
+        self.assertIn('"owner_approval_required": True', self.source)
+        self.assertIn('"execution": "not_started"', self.source)
+
     def test_router_does_not_claim_execution(self):
         self.assertIn('"execution": "not_started"', self.source)
         self.assertIn('"agent_execution": "not_automated"', self.source)
