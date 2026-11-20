@@ -1,40 +1,42 @@
-# AURA Skill Adoption Plan
+# Agency Agents Adoption Plan
 
 **Review date:** 2026-11-20  
-**Upstream:** [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills)  
-**Upstream license:** MIT (see [LICENSE](https://github.com/VoltAgent/awesome-agent-skills/blob/main/LICENSE)).
+**Upstream:** [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents)  
+**License:** MIT ([LICENSE](https://github.com/msitarzewski/agency-agents/blob/main/LICENSE)).
 
-## What was reviewed
+## Selection rationale
 
-The upstream README describes a curated catalogue of 1,497+ skills, compatible with several coding-agent environments. The catalogue contains capabilities across agent architecture, search/research, marketing, product management, video, crypto data, Cloudflare, security and testing. AURA selected only the capabilities that map to its 15-agent business model and current zero-capital/guarded operating policy.
+AURA's objective is to identify and build multiple lawful revenue streams with zero initial capital, moderate risk and owner approval before spending or external commitments. The upstream catalogue is broad; AURA adopts only 20 roles that directly support opportunity research, audience growth, content production, sales, financial operations, compliance and platform reliability.
 
-## Adopted capability groups
+## Selected divisions
 
-| AURA group | Selected upstream references | Why it fits |
-|---|---|---|
-| Research and opportunity validation | SerpApi search, Brave search, Dean Peters company research, JTBD, PESTEL, opportunity-solution tree, prioritization | Discover many market types, validate demand and rank tests |
-| Growth and content | Corey Haines content strategy, copywriting, SEO audit, analytics, CRO, referrals; Kim Barrett offer extraction, scroll-stopping creative, conversion path, language cleanup; Remotion | Build content and customer acquisition systems without limiting the business to one niche |
-| Finance and investment research | Dean Peters finance metrics; Binance market rank, token info/audit, trading signal; Coinbase on-chain query | Improve unit economics and research quality; execution tools remain blocked |
-| Platform and quality | VoltAgent best practices; Cloudflare Agents SDK, Workers best practices, Wrangler; OpenAI security and threat model; Trail of Bits static analysis/insecure defaults; TestMu Playwright; OpenAI CI repair | Build, secure and test AURA's agent platform and deployment |
+- Executive: Agents Orchestrator, Business Strategist.
+- Research & Opportunity: Product Trend Researcher, Growth Hacker.
+- Content & Audience: Content Creator, TikTok Strategist, Instagram Curator, Video Optimization Specialist, SEO Specialist, Reddit Community Builder.
+- Sales & Monetization: Offer & Lead Gen Strategist, Outbound Strategist, Sales Outreach, Proposal Strategist.
+- Operations & Finance: Finance Tracker, Analytics Reporter, Legal Compliance Checker.
+- Technology & Automation: AI Engineer, DevOps Automator, Model QA Specialist.
 
-## Deliberately excluded or gated
+Canonical upstream role paths and the responsibility of each role are recorded in `skills/registry.yaml` and `docs/agent-registry.md`.
 
-- Binance spot execution and Coinbase wallet/trade/payment skills: no live trading, custody, transfer or payment permission.
-- Paid search, ad buying, paid model APIs, scraping services and other metered tools: not activated under Rp0 starting capital without owner approval.
-- Provider-specific skills that require a stack AURA does not use (for example unrelated frontend frameworks or database providers) are not loaded just because they exist in the upstream list.
-- Browser automation, publishing and account-management capabilities remain gated behind platform authorization and owner approval.
+## Runtime implementation
 
-## Implementation in this repository
+- The Worker registry and 3D office roster use the same 20 role names and six division assignments.
+- Each role is mapped to one or more existing AURA skill packs. The role's specialty and canonical upstream file are injected into the task-scoped system context.
+- The office groups agents by division and displays live task status above each avatar.
+- Role descriptions are adapted into AURA-authored summaries; upstream skill files are not copied wholesale.
+- The 3D office uses a 16:9 landscape viewport, dark theme and blocky toy-like avatars.
 
-- `skills/registry.yaml` records selected upstream IDs, links, assigned agents and local skill-pack files.
-- `skills/*.md` are AURA-authored operational playbooks inspired by the listed capabilities. They do not reproduce upstream skill source files.
-- `docs/agent-registry.md` maps each AURA role to its skill pack.
-- `skills/README.md` describes how the packs should be used and their limitations.
+## Exclusions and safety gates
+
+- No role can grant itself new permissions or credentials.
+- No paid ads, subscriptions, paid model APIs, data services or purchases under the Rp0 default without exact owner approval.
+- No auto-sending outreach, public posting, contracts, account changes, payments, transfers or withdrawals.
+- Affiliate claims must be truthful and disclosed; third-party media must be owner-created, licensed or explicitly authorized.
+- Finance reports separate gross sales, pending commissions, refunds, fees, actual cash and net distributable cash.
+- Live trading, wallet custody and financial execution remain disabled.
+- Compliance has veto authority; Model QA is an independent review role.
 
 ## License and attribution
 
-The upstream repository's LICENSE file states MIT License and requires retention of its copyright and permission notice when distributing copies or substantial portions. This AURA implementation links to the upstream catalogue and license and writes original summaries/workflows rather than vendoring the upstream files. If future work copies any upstream skill files or substantial portions, include the original MIT notice and re-check each skill's own source/license and attribution requirements.
-
-## Important runtime limitation
-
-This is a curated skill library in source control. The Worker bundles the corresponding AURA-authored instruction bodies and routes each task to its assigned pack; it prepares context but does not invoke a model. Adding a skill does not connect its provider, install an MCP server, provision an API key, or authorize an action. Future work still needs version/provenance drift checks, a supervised model runtime, independent QA review, observability and staging integration tests before any agent can claim completed AI work.
+The upstream LICENSE is MIT and names AgentLand Contributors, copyright 2025. This implementation links to the original role files and uses concise original summaries rather than redistributing the full files. Any future substantial copied text must retain the upstream copyright and permission notice.
