@@ -90,6 +90,31 @@ class AgentTaskIn(BaseModel):
     priority: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
     related_opportunity_id: str = Field(default="", max_length=64)
 
+class AgentTaskClaimIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=80)
+    lease_seconds: int = Field(default=300, ge=60, le=900)
+
+
+class AgentTaskCompleteIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=80)
+    lease_token: str = Field(min_length=32, max_length=64)
+    result_summary: str = Field(min_length=5, max_length=3000)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AgentTaskHeartbeatIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=80)
+    lease_token: str = Field(min_length=32, max_length=64)
+    lease_seconds: int = Field(default=300, ge=60, le=900)
+
+
+class ToolRunIn(BaseModel):
+    worker_id: str = Field(min_length=2, max_length=80)
+    lease_token: str = Field(min_length=32, max_length=64)
+    tool_id: str = Field(min_length=2, max_length=80)
+    arguments: dict = Field(default_factory=dict)
+
+
 class AgentTaskStatusIn(BaseModel):
     status: str = Field(pattern="^(queued|in_progress|blocked|completed|cancelled)$")
     result_summary: str = Field(default="", max_length=3000)
@@ -640,6 +665,175 @@ async def list_agent_tasks(db=Depends(get_db)):
         t.created_at DESC LIMIT 300"""
     ).all()
     return result.results.to_py()
+
+
+# Safe, deterministic tools only. No shell, network, file access or financial actions.
+TOOL_REGISTRY = {
+    "text_stats": {
+        "name": "Text statistics",
+        "description": "Count words, characters and lines in supplied text.",
+        "permission": "local_pure",
+    },
+    "unit_economics": {
+        "name": "Unit economics calculator",
+        "description": "Calculate revenue, costs, contribution and margin from supplied numeric inputs.",
+        "permission": "local_pure",
+    },
+}
+
+
+def execute_registered_tool(tool_id: str, arguments: dict):
+    if tool_id == "text_stats":
+        text_value = arguments.get("text", "")
+        if not isinstance(text_value, str) or len(text_value) > 20000:
+            raise HTTPException(422, "text must be a string of at most 20000 characters")
+        return {
+            "word_count": len(text_value.split()),
+            "character_count": len(text_value),
+            "line_count": len(text_value.splitlines()) if text_value else 0,
+        }
+    if tool_id == "unit_economics":
+        required = ("units", "price_per_unit", "variable_cost_per_unit", "fixed_cost")
+        if any(k not in arguments for k in required):
+            raise HTTPException(422, "units, price_per_unit, variable_cost_per_unit and fixed_cost are required")
+        values = {}
+        for key in required:
+            value = arguments[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise HTTPException(422, key + " must be a non-negative number")
+            values[key] = float(value)
+        revenue = values["units"] * values["price_per_unit"]
+        variable_cost = values["units"] * values["variable_cost_per_unit"]
+        contribution = revenue - variable_cost
+        net = contribution - values["fixed_cost"]
+        return {
+            "revenue": round(revenue, 2),
+            "variable_cost": round(variable_cost, 2),
+            "contribution": round(contribution, 2),
+            "fixed_cost": round(values["fixed_cost"], 2),
+            "estimated_net_before_tax": round(net, 2),
+            "contribution_margin_percent": round((contribution / revenue) * 100, 2) if revenue else 0,
+        }
+    raise HTTPException(404, "tool not found or not enabled")
+
+
+async def get_valid_lease(db, task_id: str, worker_id: str, lease_token: str):
+    lease = await db.prepare(
+        "SELECT task_id, worker_id, lease_token, expires_at FROM task_execution_leases WHERE task_id = ?"
+    ).bind(task_id).first()
+    if lease is None or lease.worker_id != worker_id or not hmac.compare_digest(str(lease.lease_token), lease_token):
+        raise HTTPException(403, "valid task lease required")
+    if int(lease.expires_at) <= int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(409, "task lease expired; claim the task again")
+    return lease
+
+
+@app.get("/tools", dependencies=[Depends(require_api_key)])
+async def list_registered_tools():
+    return [{"id": tool_id, **meta} for tool_id, meta in TOOL_REGISTRY.items()]
+
+
+@app.post("/agent-tasks/claim-next", dependencies=[Depends(require_api_key)])
+async def claim_next_agent_task(payload: AgentTaskClaimIn, db=Depends(get_db)):
+    now = int(datetime.now(timezone.utc).timestamp())
+    # Expired leases are reclaimed by resetting only tasks still marked in_progress.
+    await db.prepare(
+        """UPDATE agent_tasks SET status = 'queued', updated_at = ?
+        WHERE status = 'in_progress' AND id IN
+        (SELECT task_id FROM task_execution_leases WHERE expires_at <= ?)"""
+    ).bind(now_iso(), now).run()
+    await db.prepare("DELETE FROM task_execution_leases WHERE expires_at <= ?").bind(now).run()
+    task = await db.prepare(
+        """UPDATE agent_tasks SET status = 'in_progress', updated_at = ?
+        WHERE id = (SELECT id FROM agent_tasks WHERE status = 'queued'
+        ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
+        created_at ASC LIMIT 1)
+        AND status = 'queued'
+        RETURNING id, agent, objective, priority, related_opportunity_id"""
+    ).bind(now_iso()).first()
+    if task is None:
+        return {"claimed": False, "reason": "queue_empty"}
+    token = uuid4().hex
+    expires = now + payload.lease_seconds
+    await db.prepare(
+        """INSERT INTO task_execution_leases (task_id, worker_id, lease_token, expires_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(task_id) DO UPDATE SET worker_id=excluded.worker_id,
+        lease_token=excluded.lease_token, expires_at=excluded.expires_at, updated_at=excluded.updated_at"""
+    ).bind(task.id, payload.worker_id, token, expires, now_iso()).run()
+    pack_ids = await persist_task_route(db, task.id, task.agent)
+    await write_audit(db, "agent_task.claimed", task.id, payload.worker_id)
+    return {
+        "claimed": True,
+        "task": {"id": task.id, "agent": task.agent, "objective": task.objective,
+                 "priority": task.priority, "related_opportunity_id": task.related_opportunity_id},
+        "skill_pack_ids": pack_ids,
+        "lease": {"worker_id": payload.worker_id, "lease_token": token, "expires_at": expires},
+    }
+
+
+@app.post("/agent-tasks/{task_id}/heartbeat", dependencies=[Depends(require_api_key)])
+async def heartbeat_agent_task(task_id: str, payload: AgentTaskHeartbeatIn, db=Depends(get_db)):
+    await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    expires = int(datetime.now(timezone.utc).timestamp()) + payload.lease_seconds
+    await db.prepare(
+        "UPDATE task_execution_leases SET expires_at = ?, updated_at = ? WHERE task_id = ?"
+    ).bind(expires, now_iso(), task_id).run()
+    await write_audit(db, "agent_task.heartbeat", task_id, payload.worker_id)
+    return {"task_id": task_id, "lease_expires_at": expires}
+
+
+@app.post("/agent-tasks/{task_id}/tools", dependencies=[Depends(require_api_key)])
+async def run_agent_tool(task_id: str, payload: ToolRunIn, db=Depends(get_db)):
+    await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    task = await db.prepare("SELECT status, agent FROM agent_tasks WHERE id = ?").bind(task_id).first()
+    if task is None or task.status != "in_progress":
+        raise HTTPException(409, "task must be in progress")
+    if payload.tool_id not in TOOL_REGISTRY:
+        raise HTTPException(403, "tool is not registered")
+    result = execute_registered_tool(payload.tool_id, payload.arguments)
+    artifact_id = uuid4().hex
+    await db.prepare(
+        """INSERT INTO task_execution_artifacts
+        (id, task_id, artifact_type, artifact_name, content_json, created_at)
+        VALUES (?, ?, 'tool_result', ?, ?, ?)"""
+    ).bind(artifact_id, task_id, payload.tool_id, __import__("json").dumps(result), now_iso()).run()
+    await write_audit(db, "agent_task.tool_executed", task_id, payload.tool_id)
+    return {"task_id": task_id, "tool_id": payload.tool_id, "result": result, "artifact_id": artifact_id}
+
+
+@app.post("/agent-tasks/{task_id}/complete", dependencies=[Depends(require_api_key)])
+async def complete_agent_task(task_id: str, payload: AgentTaskCompleteIn, db=Depends(get_db)):
+    await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    task = await db.prepare("SELECT status FROM agent_tasks WHERE id = ?").bind(task_id).first()
+    if task is None or task.status != "in_progress":
+        raise HTTPException(409, "task must be in progress")
+    await db.prepare(
+        "UPDATE agent_tasks SET status = 'completed', result_summary = ?, updated_at = ? WHERE id = ?"
+    ).bind(payload.result_summary, now_iso(), task_id).run()
+    for evidence in payload.evidence:
+        if not isinstance(evidence, str) or len(evidence) > 2000:
+            raise HTTPException(422, "each evidence item must be a string up to 2000 characters")
+        await db.prepare(
+            """INSERT INTO task_execution_artifacts
+            (id, task_id, artifact_type, artifact_name, content_json, created_at)
+            VALUES (?, ?, 'evidence', 'owner_or_worker_supplied', ?, ?)"""
+        ).bind(uuid4().hex, task_id, __import__("json").dumps({"evidence": evidence}), now_iso()).run()
+    await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
+    await write_audit(db, "agent_task.completed", task_id, payload.worker_id)
+    return {"task_id": task_id, "status": "completed", "qa_status": "pending_review"}
+
+
+@app.post("/agent-tasks/{task_id}/release", dependencies=[Depends(require_api_key)])
+async def release_agent_task(task_id: str, payload: AgentTaskHeartbeatIn, db=Depends(get_db)):
+    await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    await db.prepare(
+        "UPDATE agent_tasks SET status = 'queued', updated_at = ? WHERE id = ? AND status = 'in_progress'"
+    ).bind(now_iso(), task_id).run()
+    await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
+    await write_audit(db, "agent_task.released", task_id, payload.worker_id)
+    return {"task_id": task_id, "status": "queued"}
+
 
 @app.post("/agent-tasks/{task_id}/status", dependencies=[Depends(require_api_key)])
 async def update_agent_task(task_id: str, payload: AgentTaskStatusIn, db=Depends(get_db)):
