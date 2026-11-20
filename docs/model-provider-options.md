@@ -1,7 +1,7 @@
 # AURA Model Provider Options (Zero-Capital Policy)
 
 **Research date:** 20 November 2026  
-**Decision status:** Evaluation only — no provider is selected or enabled.
+**Decision status:** Integration prepared; all providers remain disabled pending owner Free-tier confirmations.
 
 AURA's operating constraint is Rp0 starting capital. No provider call, paid fallback, billing activation, or scheduler activation is authorized by this document.
 
@@ -11,7 +11,7 @@ AURA's operating constraint is Rp0 starting capital. No provider call, paid fall
 |---|---|---|---|
 | Cloudflare Workers AI | 10,000 Neurons/day on Workers Free | **Best first candidate**: native Worker binding, no external API key, one platform boundary | Neurons are not a request count; model choice affects consumption. On Workers Paid, usage above the daily free allocation is billed. |
 | Groq | Free tier exists, but current public rate-limit tables describe Developer-plan limits; Developer tier requires a payment method and is billed per token | **Optional manually selected external alternative**: OpenAI-compatible API | Must remain disabled unless the account is confirmed Free with no payment method. Do not interpret Developer-plan limits as free quotas. |
-| Google Gemini API | Selected models have free input/output token access | Strong general-purpose reasoning candidate | Google states free-tier content may be used to improve its products. Project-level limits can change. |
+| Google Gemini API | Selected models such as Gemini 2.5 Flash-Lite have free input/output token access | **Second automatic fallback** after Cloudflare quota exhaustion | Requires `GEMINI_API_KEY`, explicit Free-tier confirmation and data-use acceptance; free-tier content may be used to improve Google products. |
 | OpenRouter | Free model variants ending in :free; 20 RPM and 50 requests/day, with a higher daily cap only after a credit purchase | Useful for experiments and model variety | Model availability is dynamic; the higher quota depends on buying credits, which AURA must never do. |
 | Cohere | Trial/evaluation keys; 1,000 API calls/month for trial keys | Possible specialist alternative | Small monthly quota for a multi-agent runtime. |
 | Mistral | Free mode for some product surfaces | Not selected for API runtime | Current docs say API keys/API use require billing activation and pay-as-you-go. |
@@ -34,7 +34,7 @@ Limits are snapshots, not guarantees. Provider terms, models and quotas can chan
 - Allowlist model IDs; never accept arbitrary model IDs from task input.
 - Hard cap requests, input size, output size, concurrency and daily usage in AURA's own D1 ledger.
 - Treat HTTP 429/quota exhaustion as a stop condition. Do not retry against a paid endpoint or silently switch providers.
-- Groq requires both AURA_GROQ_ENABLED and AURA_GROQ_FREE_TIER_CONFIRMED. The latter is an owner assertion, not an API-verifiable billing check. Keep Groq disabled if a payment method or Developer tier is active.
+- Gemini requires both AURA_GEMINI_ENABLED and AURA_GEMINI_FREE_TIER_CONFIRMED plus `GEMINI_API_KEY`. The confirmation is an owner assertion, not an API-verifiable billing check.\n- Groq requires both AURA_GROQ_ENABLED and AURA_GROQ_FREE_TIER_CONFIRMED. The latter is an owner assertion, not an API-verifiable billing check. Keep Groq disabled if a payment method or Developer tier is active.\n- Automatic order is Cloudflare → Gemini → Groq. Failover occurs only on explicit quota/rate-limit exhaustion (HTTP 429 or recognized quota errors). Authentication, billing, configuration, model, and unknown errors stop execution. Each attempted provider consumes one AURA daily call-cap unit.
 - If a provider reports billing-required, payment-required, quota-exceeded, or unknown billing state, fail closed and block further inference.
 - Never store provider keys in source code, frontend bundles, logs or task artifacts. Use Cloudflare Worker secrets.
 - Do not send credentials, personal secrets, financial account identifiers or unnecessary personal data in prompts.
@@ -43,7 +43,7 @@ Limits are snapshots, not guarantees. Provider terms, models and quotas can chan
 
 ## Current AURA state
 
-The Worker currently prepares an OpenAI-compatible request preview only. Its provider status reports that transport is disabled. The scheduler is disabled and observe-only. This is intentional and must remain so until the owner explicitly chooses a provider and accepts the provider-specific data terms.
+The Worker has Cloudflare Workers AI, Gemini and Groq adapters with automatic quota-only failover. All model and provider flags default to false; no inference runs until the owner confirms the relevant free tier, accepts data terms, configures keys and enables the feature. The scheduler remains disabled.
 
 ## Official references
 
