@@ -84,8 +84,8 @@ class LocalApiSecurityTests(unittest.TestCase):
     def test_non_finite_financial_values_are_rejected(self):
         response = client.post(
             "/ledger",
-            headers=AUTH,
-            json={"entry_type": "income", "category": "test", "amount": float("inf")},
+            headers={**AUTH, "Content-Type": "application/json"},
+            content='{"entry_type":"income","category":"test","amount":1e999}',
         )
         self.assertEqual(response.status_code, 422)
 
