@@ -239,7 +239,7 @@ Workers.dev is enabled so the first deployment can work without buying a domain.
 
 The deployment workflow is .github/workflows/deploy-cloudflare.yml. It provisions or reuses the D1 database named aura-autopilot-db, applies the idempotent SQL schema, sets the Worker API secret, builds the 3D frontend, deploys the Worker, then checks the public health and page routes. It is intentionally manual (workflow_dispatch) until the account secrets have been configured.
 
-1. In Cloudflare, create an API token using the Edit Cloudflare Workers template. Restrict it to the one Cloudflare account used for AURA. Cloudflare's GitHub Actions guide uses CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as CI secrets; never put these values in source code.
+1. In Cloudflare, create an API token using the Edit Cloudflare Workers template, then explicitly add Account permission D1: Edit (the template does not include D1 Edit by default). Keep Workers Scripts: Edit, and restrict the token to the one Cloudflare account used for AURA. Cloudflare's GitHub Actions guide uses CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as CI secrets; never put these values in source code.
 2. Get the Cloudflare Account ID from the account overview.
 3. Generate a private AURA API key in PowerShell:
 
