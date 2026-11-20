@@ -11,6 +11,7 @@ import ipaddress
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
@@ -24,6 +25,25 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None,
 )
+
+def sanitize_validation_data(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): sanitize_validation_data(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitize_validation_data(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": sanitize_validation_data(exc.errors())},
+    )
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
