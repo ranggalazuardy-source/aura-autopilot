@@ -23,7 +23,7 @@ Limits are snapshots, not guarantees. Provider terms, models and quotas can chan
 
 1. **Prototype on Cloudflare Workers AI first**, if the Cloudflare account is confirmed to be on Workers Free and the selected model is available within the free allocation.
 2. Keep **Groq as an optional manually selected adapter**, never an automatic fallback. Enable it only after confirming the Groq account is on the Free tier with no payment method attached, explicitly approving external data processing, and configuring a key.
-3. Keep **Gemini optional**, not default, because free-tier data-use terms are less suitable for sending private business context.
+3. Keep **Gemini as the final automatic fallback** after Groq. Enable it only after confirming Free-tier eligibility, accepting its data-use terms and configuring a key; do not send private or sensitive business context.
 4. Do not use OpenRouter's paid-credit quota uplift, paid model variants, Cerebras starter credits, or any paid fallback.
 
 ## Required technical guardrails
@@ -34,7 +34,7 @@ Limits are snapshots, not guarantees. Provider terms, models and quotas can chan
 - Allowlist model IDs; never accept arbitrary model IDs from task input.
 - Hard cap requests, input size, output size, concurrency and daily usage in AURA's own D1 ledger.
 - Treat HTTP 429/quota exhaustion as a stop condition. Do not retry against a paid endpoint or silently switch providers.
-- Gemini requires both AURA_GEMINI_ENABLED and AURA_GEMINI_FREE_TIER_CONFIRMED plus `GEMINI_API_KEY`. The confirmation is an owner assertion, not an API-verifiable billing check.\n- Groq requires both AURA_GROQ_ENABLED and AURA_GROQ_FREE_TIER_CONFIRMED. The latter is an owner assertion, not an API-verifiable billing check. Keep Groq disabled if a payment method or Developer tier is active.\n- Automatic order is Cloudflare → Gemini → Groq. Failover occurs only on explicit quota/rate-limit exhaustion (HTTP 429 or recognized quota errors). Authentication, billing, configuration, model, and unknown errors stop execution. Each attempted provider consumes one AURA daily call-cap unit.
+- Gemini requires both AURA_GEMINI_ENABLED and AURA_GEMINI_FREE_TIER_CONFIRMED plus `GEMINI_API_KEY`. The confirmation is an owner assertion, not an API-verifiable billing check.\n- Groq requires both AURA_GROQ_ENABLED and AURA_GROQ_FREE_TIER_CONFIRMED. The latter is an owner assertion, not an API-verifiable billing check. Keep Groq disabled if a payment method or Developer tier is active.\n- Automatic order is Cloudflare → Groq → Gemini. Failover occurs on quota/rate-limit exhaustion (HTTP 429 or recognized quota errors) and transient upstream failures (HTTP 5xx, timeout or network failure). Authentication, billing, configuration and invalid-request errors stop execution. Each attempted provider consumes one AURA daily call-cap unit. A provider is eligible only when its explicit enable flag, Free-tier confirmation and credential/binding are present.
 - If a provider reports billing-required, payment-required, quota-exceeded, or unknown billing state, fail closed and block further inference.
 - Never store provider keys in source code, frontend bundles, logs or task artifacts. Use Cloudflare Worker secrets.
 - Do not send credentials, personal secrets, financial account identifiers or unnecessary personal data in prompts.
@@ -43,7 +43,7 @@ Limits are snapshots, not guarantees. Provider terms, models and quotas can chan
 
 ## Current AURA state
 
-The Worker has Cloudflare Workers AI, Gemini and Groq adapters with automatic quota-only failover. All model and provider flags default to false; no inference runs until the owner confirms the relevant free tier, accepts data terms, configures keys and enables the feature. The scheduler remains disabled.
+The Worker has Cloudflare Workers AI, Groq and Gemini adapters with ordered failover on quota exhaustion and transient upstream failures. All model and provider flags default to false; no inference runs until the owner confirms the relevant free tier, accepts data terms, configures keys and enables the feature. The scheduler remains disabled.
 
 ## Official references
 
