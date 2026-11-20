@@ -184,3 +184,8 @@ See `docs/skill-runtime-routing.md` for API behavior and the execution boundary.
 AURA now includes authenticated research-run tracking, source provenance intake, manual source verification, transparent opportunity scoring, market comparison snapshots, and CEO decision recommendations. The scoring model weights demand, competition, unit economics, zero-capital fit, speed to revenue, skill fit, evidence quality and risk control. Recommendations are advisory only; owner approval remains required.
 
 Research source intake accepts HTTPS URLs and owner/worker-supplied excerpts. It does not crawl or fetch websites, and newly submitted sources remain unverified until manually reviewed. No live search provider, model provider, background worker or paid integration is configured.
+
+
+## Zero-cost Web Research Adapter (v0.9.0)
+
+AURA adds a public DuckDuckGo HTML search adapter for owner-initiated market research. Results are stored as unverified source leads with excerpts, publisher hostnames and content hashes. Search requests are rate-limited to 10 per 10 minutes globally per deployment. This is a best-effort public HTML integration, not a guaranteed search API; provider markup, availability and terms can change.
