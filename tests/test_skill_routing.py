@@ -93,6 +93,9 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertNotIn("subprocess.", self.source)
         self.assertNotIn("os.system(", self.source)
 
+    def test_manual_status_endpoint_cannot_mark_tasks_completed(self):
+        self.assertIn('status: str = Field(pattern="^(queued|blocked|cancelled)$")', self.source)
+
     def test_task_execution_is_not_model_execution(self):
         self.assertIn('"qa_status": "pending_review"', self.source)
         self.assertIn('"permission": "local_pure"', self.source)
