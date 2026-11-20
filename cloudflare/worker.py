@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import hmac
 import json
+import ipaddress
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -84,6 +86,52 @@ class ContentItemIn(BaseModel):
 
 class ContentStatusIn(BaseModel):
     status: str = Field(pattern="^(idea|draft|in_review|approved|published|paused)$")
+
+class ResearchRunIn(BaseModel):
+    agent: str = Field(default="Market Intelligence", min_length=2, max_length=80)
+    query: str = Field(min_length=5, max_length=500)
+    market_scope: str = Field(default="Indonesia", max_length=200)
+
+
+class ResearchSourceIn(BaseModel):
+    run_id: str = Field(min_length=8, max_length=64)
+    opportunity_id: str = Field(default="", max_length=64)
+    title: str = Field(min_length=3, max_length=300)
+    url: str = Field(min_length=12, max_length=2000)
+    publisher: str = Field(min_length=2, max_length=200)
+    source_type: str = Field(default="industry", pattern="^(official|industry|news|community|academic|other)$")
+    published_at: str = Field(default="", max_length=40)
+    excerpt: str = Field(default="", max_length=5000)
+
+
+class ResearchSourceVerifyIn(BaseModel):
+    status: str = Field(pattern="^(verified|rejected)$")
+    reviewer_notes: str = Field(default="", max_length=1000)
+
+
+class OpportunityScoreIn(BaseModel):
+    demand: int = Field(ge=1, le=5)
+    competition: int = Field(ge=1, le=5)
+    unit_economics: int = Field(ge=1, le=5)
+    zero_capital_fit: int = Field(ge=1, le=5)
+    speed_to_revenue: int = Field(ge=1, le=5)
+    skill_fit: int = Field(ge=1, le=5)
+    evidence_quality: int = Field(ge=1, le=5)
+    risk_control: int = Field(ge=1, le=5)
+    rationale: str = Field(min_length=10, max_length=3000)
+
+
+class MarketCompareIn(BaseModel):
+    opportunity_ids: list[str] = Field(min_length=2, max_length=10)
+    title: str = Field(default="Opportunity comparison", max_length=200)
+
+
+class CEODecisionIn(BaseModel):
+    comparison_id: str = Field(min_length=8, max_length=64)
+    selected_opportunity_id: str = Field(default="", max_length=64)
+    decision: str = Field(pattern="^(recommend_pilot|collect_evidence|deprioritize)$")
+    rationale: str = Field(min_length=10, max_length=3000)
+
 
 class AgentTaskIn(BaseModel):
     agent: str = Field(min_length=2, max_length=80)
@@ -852,6 +900,247 @@ async def update_agent_task(task_id: str, payload: AgentTaskStatusIn, db=Depends
     ).bind(payload.status, payload.result_summary, now_iso(), task_id).run()
     await write_audit(db, "agent_task.status_changed", task_id, payload.status)
     return {"id": task_id, "status": payload.status, "agent_execution": "not_automated"}
+
+
+# Research Intelligence Engine: evidence intake, transparent scoring and decision support.
+SCORE_WEIGHTS = {
+    "demand": 18, "competition": 10, "unit_economics": 15,
+    "zero_capital_fit": 18, "speed_to_revenue": 10,
+    "skill_fit": 10, "evidence_quality": 10, "risk_control": 9,
+}
+
+
+def validate_public_https_url(value: str):
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(422, "source URL must be a public HTTPS URL without embedded credentials")
+    host = parsed.hostname.lower().rstrip(".")
+    if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
+        raise HTTPException(422, "local hostnames are not valid research sources")
+    try:
+        ip = ipaddress.ip_address(host)
+        if not ip.is_global:
+            raise HTTPException(422, "non-public IP addresses are not valid research sources")
+    except ValueError:
+        pass
+    return parsed
+
+
+def score_opportunity_dimensions(dimensions: dict):
+    weighted = sum(((float(dimensions[key]) - 1) / 4) * weight for key, weight in SCORE_WEIGHTS.items())
+    return round(max(0, min(100, weighted)), 2)
+
+
+def recommendation_for_score(score: float, confidence: float, estimated_cost: float):
+    if estimated_cost > 0:
+        return "hold_for_owner_cost_approval"
+    if score >= 70 and confidence >= 60:
+        return "recommend_zero_cost_pilot"
+    if score >= 55 and confidence >= 35:
+        return "collect_more_evidence"
+    return "deprioritize"
+
+
+@app.post("/research/runs", dependencies=[Depends(require_api_key)])
+async def create_research_run(payload: ResearchRunIn, db=Depends(get_db)):
+    run_id = uuid4().hex
+    await db.prepare(
+        """INSERT INTO research_runs (id, agent, query, market_scope, status, started_at)
+        VALUES (?, ?, ?, ?, 'collecting', ?)"""
+    ).bind(run_id, payload.agent, payload.query, payload.market_scope, now_iso()).run()
+    await write_audit(db, "research.run_created", run_id, payload.query)
+    return {"id": run_id, "status": "collecting", "collection_mode": "manual_source_ingestion"}
+
+
+@app.get("/research/runs", dependencies=[Depends(require_api_key)])
+async def list_research_runs(db=Depends(get_db)):
+    result = await db.prepare(
+        "SELECT id, agent, query, market_scope, status, started_at, completed_at FROM research_runs ORDER BY started_at DESC LIMIT 100"
+    ).all()
+    return result.results.to_py()
+
+
+@app.post("/research/sources", dependencies=[Depends(require_api_key)])
+async def add_research_source(payload: ResearchSourceIn, db=Depends(get_db)):
+    validate_public_https_url(payload.url)
+    run = await db.prepare("SELECT id FROM research_runs WHERE id = ?").bind(payload.run_id).first()
+    if run is None:
+        raise HTTPException(404, "research run not found")
+    if payload.opportunity_id:
+        opportunity = await db.prepare("SELECT id FROM opportunities WHERE id = ?").bind(payload.opportunity_id).first()
+        if opportunity is None:
+            raise HTTPException(404, "opportunity not found")
+    source_id = uuid4().hex
+    digest = __import__("hashlib").sha256((payload.url + "\n" + payload.excerpt).encode("utf-8")).hexdigest()
+    await db.prepare(
+        """INSERT INTO research_sources
+        (id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
+         excerpt, content_hash, verification_status, reviewer_notes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unverified', '', ?)"""
+    ).bind(source_id, payload.run_id, payload.opportunity_id, payload.title, payload.url,
+           payload.publisher, payload.source_type, payload.published_at, payload.excerpt,
+           digest, now_iso()).run()
+    await write_audit(db, "research.source_added", source_id, payload.publisher)
+    return {"id": source_id, "verification_status": "unverified", "content_hash": digest}
+
+
+@app.get("/research/sources", dependencies=[Depends(require_api_key)])
+async def list_research_sources(run_id: str = "", opportunity_id: str = "", db=Depends(get_db)):
+    if run_id:
+        result = await db.prepare(
+            """SELECT id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
+            excerpt, content_hash, verification_status, reviewer_notes, created_at
+            FROM research_sources WHERE run_id = ? ORDER BY created_at DESC LIMIT 200"""
+        ).bind(run_id).all()
+    elif opportunity_id:
+        result = await db.prepare(
+            """SELECT id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
+            excerpt, content_hash, verification_status, reviewer_notes, created_at
+            FROM research_sources WHERE opportunity_id = ? ORDER BY created_at DESC LIMIT 200"""
+        ).bind(opportunity_id).all()
+    else:
+        result = await db.prepare(
+            """SELECT id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
+            excerpt, content_hash, verification_status, reviewer_notes, created_at
+            FROM research_sources ORDER BY created_at DESC LIMIT 200"""
+        ).all()
+    return result.results.to_py()
+
+
+@app.post("/research/sources/{source_id}/verify", dependencies=[Depends(require_api_key)])
+async def verify_research_source(source_id: str, payload: ResearchSourceVerifyIn, db=Depends(get_db)):
+    source = await db.prepare("SELECT id, verification_status FROM research_sources WHERE id = ?").bind(source_id).first()
+    if source is None:
+        raise HTTPException(404, "research source not found")
+    if source.verification_status != "unverified":
+        raise HTTPException(409, "source has already received a verification decision")
+    await db.prepare(
+        "UPDATE research_sources SET verification_status = ?, reviewer_notes = ? WHERE id = ?"
+    ).bind(payload.status, payload.reviewer_notes, source_id).run()
+    await write_audit(db, "research.source_" + payload.status, source_id, payload.reviewer_notes)
+    return {"id": source_id, "verification_status": payload.status, "verification_method": "authenticated_manual_review"}
+
+
+@app.post("/opportunities/{opportunity_id}/score", dependencies=[Depends(require_api_key)])
+async def score_opportunity(opportunity_id: str, payload: OpportunityScoreIn, db=Depends(get_db)):
+    opportunity = await db.prepare(
+        "SELECT id, title, estimated_cost FROM opportunities WHERE id = ?"
+    ).bind(opportunity_id).first()
+    if opportunity is None:
+        raise HTTPException(404, "opportunity not found")
+    dimensions = payload.model_dump(exclude={"rationale"})
+    score = score_opportunity_dimensions(dimensions)
+    evidence = await db.prepare(
+        """SELECT COUNT(*) AS total,
+        SUM(CASE WHEN verification_status = 'verified' THEN 1 ELSE 0 END) AS verified,
+        COUNT(DISTINCT CASE WHEN verification_status = 'verified' THEN publisher END) AS publishers
+        FROM research_sources WHERE opportunity_id = ?"""
+    ).bind(opportunity_id).first()
+    verified = int(evidence.verified or 0)
+    publishers = int(evidence.publishers or 0)
+    confidence = min(100, verified * 20 + publishers * 10)
+    recommendation = recommendation_for_score(score, confidence, float(opportunity.estimated_cost))
+    await db.prepare(
+        """INSERT INTO opportunity_scores
+        (opportunity_id, dimensions_json, score, confidence, verified_sources, independent_publishers,
+         recommendation, rationale, scored_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(opportunity_id) DO UPDATE SET dimensions_json=excluded.dimensions_json,
+        score=excluded.score, confidence=excluded.confidence, verified_sources=excluded.verified_sources,
+        independent_publishers=excluded.independent_publishers, recommendation=excluded.recommendation,
+        rationale=excluded.rationale, scored_at=excluded.scored_at"""
+    ).bind(opportunity_id, json.dumps(dimensions), score, confidence, verified, publishers,
+           recommendation, payload.rationale, now_iso()).run()
+    await write_audit(db, "opportunity.scored", opportunity_id, recommendation)
+    return {"opportunity_id": opportunity_id, "score": score, "confidence": confidence,
+            "verified_sources": verified, "independent_publishers": publishers,
+            "recommendation": recommendation, "dimensions": dimensions,
+            "note": "Score is decision support, not a guarantee of revenue."}
+
+
+@app.get("/opportunities/scores", dependencies=[Depends(require_api_key)])
+async def list_opportunity_scores(db=Depends(get_db)):
+    result = await db.prepare(
+        """SELECT o.id, o.title, o.channel, o.estimated_cost, o.estimated_revenue, o.risk_level,
+        s.dimensions_json, s.score, s.confidence, s.verified_sources, s.independent_publishers,
+        s.recommendation, s.rationale, s.scored_at
+        FROM opportunity_scores s JOIN opportunities o ON o.id = s.opportunity_id
+        ORDER BY s.score DESC, s.confidence DESC LIMIT 200"""
+    ).all()
+    return result.results.to_py()
+
+
+@app.post("/research/compare", dependencies=[Depends(require_api_key)])
+async def compare_opportunities(payload: MarketCompareIn, db=Depends(get_db)):
+    rows = []
+    for opportunity_id in payload.opportunity_ids:
+        row = await db.prepare(
+            """SELECT o.id, o.title, o.channel, o.rationale, o.estimated_cost, o.estimated_revenue,
+            o.risk_level, s.score, s.confidence, s.verified_sources, s.independent_publishers,
+            s.recommendation FROM opportunities o LEFT JOIN opportunity_scores s ON s.opportunity_id=o.id
+            WHERE o.id = ?"""
+        ).bind(opportunity_id).first()
+        if row is None:
+            raise HTTPException(404, "opportunity not found: " + opportunity_id)
+        rows.append({key: getattr(row, key, None) for key in [
+            "id","title","channel","rationale","estimated_cost","estimated_revenue","risk_level",
+            "score","confidence","verified_sources","independent_publishers","recommendation"]})
+    rows.sort(key=lambda item: (item["score"] if item["score"] is not None else -1,
+                               item["confidence"] if item["confidence"] is not None else -1), reverse=True)
+    comparison_id = uuid4().hex
+    await db.prepare(
+        "INSERT INTO market_comparisons (id, title, opportunity_ids_json, comparison_json, created_at) VALUES (?, ?, ?, ?, ?)"
+    ).bind(comparison_id, payload.title, json.dumps(payload.opportunity_ids), json.dumps(rows), now_iso()).run()
+    await write_audit(db, "research.opportunities_compared", comparison_id, payload.title)
+    return {"id": comparison_id, "ranked_opportunities": rows,
+            "decision_rule": "Rank by score then evidence confidence; missing scores rank last."}
+
+
+@app.get("/research/compare/{comparison_id}", dependencies=[Depends(require_api_key)])
+async def get_market_comparison(comparison_id: str, db=Depends(get_db)):
+    row = await db.prepare(
+        "SELECT id, title, opportunity_ids_json, comparison_json, created_at FROM market_comparisons WHERE id = ?"
+    ).bind(comparison_id).first()
+    if row is None:
+        raise HTTPException(404, "comparison not found")
+    return {"id": row.id, "title": row.title, "opportunity_ids": json.loads(row.opportunity_ids_json),
+            "ranked_opportunities": json.loads(row.comparison_json), "created_at": row.created_at}
+
+
+@app.post("/ceo/decisions", dependencies=[Depends(require_api_key)])
+async def record_ceo_decision(payload: CEODecisionIn, db=Depends(get_db)):
+    comparison = await db.prepare(
+        "SELECT id, comparison_json FROM market_comparisons WHERE id = ?"
+    ).bind(payload.comparison_id).first()
+    if comparison is None:
+        raise HTTPException(404, "comparison not found")
+    ranked = json.loads(comparison.comparison_json)
+    allowed = {item["id"] for item in ranked}
+    if payload.selected_opportunity_id and payload.selected_opportunity_id not in allowed:
+        raise HTTPException(422, "selected opportunity must belong to this comparison")
+    if payload.decision == "recommend_pilot" and not payload.selected_opportunity_id:
+        raise HTTPException(422, "recommend_pilot requires a selected opportunity")
+    decision_id = uuid4().hex
+    await db.prepare(
+        """INSERT INTO ceo_decisions
+        (id, comparison_id, selected_opportunity_id, decision, rationale, owner_approval_required, created_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?)"""
+    ).bind(decision_id, payload.comparison_id, payload.selected_opportunity_id,
+           payload.decision, payload.rationale, now_iso()).run()
+    await write_audit(db, "ceo.decision_recorded", decision_id, payload.decision)
+    return {"id": decision_id, "decision": payload.decision,
+            "selected_opportunity_id": payload.selected_opportunity_id,
+            "owner_approval_required": True, "execution": "not_started"}
+
+
+@app.get("/ceo/decisions", dependencies=[Depends(require_api_key)])
+async def list_ceo_decisions(db=Depends(get_db)):
+    result = await db.prepare(
+        """SELECT id, comparison_id, selected_opportunity_id, decision, rationale,
+        owner_approval_required, created_at FROM ceo_decisions ORDER BY created_at DESC LIMIT 100"""
+    ).all()
+    return result.results.to_py()
+
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
 async def audit_entries(db=Depends(get_db)):
