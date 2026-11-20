@@ -87,6 +87,17 @@ def get_env(request: Request):
     return request.scope.get("env")
 
 
+def d1_rows(result):
+    """Return D1 rows across Pyodide proxy and native Python list representations."""
+    rows = getattr(result, "results", None)
+    if rows is None:
+        return []
+    to_py = getattr(rows, "to_py", None)
+    if callable(to_py):
+        rows = to_py()
+    return [] if rows is None else rows
+
+
 def get_db(request: Request):
     env = get_env(request)
     if env is None or not getattr(env, "DB", None):
@@ -431,7 +442,7 @@ async def list_opportunities(db=Depends(get_db)):
         """SELECT id, title, channel, rationale, estimated_cost, estimated_revenue,
         risk_level, status, created_at FROM opportunities ORDER BY created_at DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.post("/opportunities/{opportunity_id}/status", dependencies=[Depends(require_api_key)])
@@ -462,7 +473,7 @@ async def list_approvals(db=Depends(get_db)):
         """SELECT id, action_type, description, amount, status, created_at
         FROM approvals ORDER BY created_at DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.post("/approvals/{approval_id}/decision", dependencies=[Depends(require_api_key)])
@@ -512,7 +523,7 @@ async def ledger_entries(db=Depends(get_db)):
         """SELECT id, entry_type, category, amount, note, created_at
         FROM ledger ORDER BY created_at DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.post("/content", dependencies=[Depends(require_api_key)])
@@ -534,7 +545,7 @@ async def list_content_items(db=Depends(get_db)):
         """SELECT id, title, platform, format, pillar, hook, script, rights_status, status, created_at, updated_at
         FROM content_items ORDER BY updated_at DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 @app.post("/content/{content_id}/status", dependencies=[Depends(require_api_key)])
 async def update_content_status(content_id: str, payload: ContentStatusIn, db=Depends(get_db)):
@@ -904,7 +915,7 @@ async def list_agent_tasks(db=Depends(get_db)):
         ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
         t.created_at DESC LIMIT 300"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.get("/office/state", dependencies=[Depends(require_api_key)])
@@ -920,7 +931,7 @@ async def virtual_office_state(db=Depends(get_db)):
         LEFT JOIN task_execution_leases l ON l.task_id = t.id
         ORDER BY t.updated_at DESC LIMIT 500"""
     ).all()
-    all_tasks = task_result.results.to_py()
+    all_tasks = d1_rows(task_result)
     active_tasks = []
     for task in all_tasks:
         expires = task.get("lease_expires_at")
@@ -981,7 +992,7 @@ async def virtual_office_state(db=Depends(get_db)):
         """SELECT id, event_type, object_id, details, created_at
         FROM audit_log ORDER BY created_at DESC LIMIT 60"""
     ).all()
-    logs = log_result.results.to_py()
+    logs = d1_rows(log_result)
     jakarta_tz = timezone(timedelta(hours=7))
     today_jakarta = datetime.now(timezone.utc).astimezone(jakarta_tz).date()
     completed_today = 0
@@ -1460,7 +1471,7 @@ async def list_research_runs(db=Depends(get_db)):
     result = await db.prepare(
         "SELECT id, agent, query, market_scope, status, started_at, completed_at FROM research_runs ORDER BY started_at DESC LIMIT 100"
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.post("/research/sources", dependencies=[Depends(require_api_key)])
@@ -1509,7 +1520,7 @@ async def list_research_sources(run_id: str = "", opportunity_id: str = "", db=D
             excerpt, content_hash, verification_status, reviewer_notes, created_at
             FROM research_sources ORDER BY created_at DESC LIMIT 200"""
         ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 
@@ -1589,7 +1600,7 @@ async def list_opportunity_scores(db=Depends(get_db)):
         FROM opportunity_scores s JOIN opportunities o ON o.id = s.opportunity_id
         ORDER BY s.score DESC, s.confidence DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.post("/research/compare", dependencies=[Depends(require_api_key)])
@@ -1696,7 +1707,7 @@ async def list_ceo_decisions(db=Depends(get_db)):
         """SELECT id, comparison_id, selected_opportunity_id, decision, rationale,
         owner_approval_required, created_at FROM ceo_decisions ORDER BY created_at DESC LIMIT 100"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
@@ -1705,7 +1716,7 @@ async def audit_entries(db=Depends(get_db)):
         """SELECT id, event_type, object_id, details, created_at
         FROM audit_log ORDER BY created_at DESC LIMIT 200"""
     ).all()
-    return result.results.to_py()
+    return d1_rows(result)
 
 
 # Use Cloudflare's official ASGI entrypoint. The adapter injects Worker bindings
