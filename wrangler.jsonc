@@ -8,10 +8,15 @@
   ],
   "workers_dev": true,
   "vars": {
-    "AURA_SCHEDULER_ENABLED": "false"
+    "AURA_SCHEDULER_ENABLED": "false",
+    "AURA_MODEL_ENABLED": "false",
+    "AURA_GROQ_ENABLED": "false",
+    "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED": "false"
   },
   "triggers": {
-    "crons": ["*/15 * * * *"]
+    "crons": [
+      "*/15 * * * *"
+    ]
   },
   "assets": {
     "directory": "./virtual-office/dist",
@@ -44,5 +49,8 @@
       "enabled": true,
       "head_sampling_rate": 1
     }
+  },
+  "ai": {
+    "binding": "AI"
   }
 }
