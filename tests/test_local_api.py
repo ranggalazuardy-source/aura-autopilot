@@ -11,7 +11,7 @@ os.environ["AURA_API_KEY"] = "aura-test-key-not-for-production"
 from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
+client = TestClient(app, raise_server_exceptions=False)
 AUTH = {"X-AURA-API-Key": os.environ["AURA_API_KEY"]}
 
 
