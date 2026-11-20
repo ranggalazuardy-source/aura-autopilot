@@ -1707,4 +1707,4 @@ async def audit_entries(db=Depends(get_db)):
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         # Pass the runtime env explicitly so FastAPI's ASGI scope receives D1 and secrets.
-        return await asgi.fetch(app, request.js_object, self.env)
+        return await asgi.fetch(app, request, self.env)
