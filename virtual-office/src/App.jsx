@@ -55,7 +55,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState("CEO Orchestrator");
+  const [selectedAgent, setSelectedAgent] = useState("Agents Orchestrator");
   const [taskFilter, setTaskFilter] = useState("all");
   const [lastUpdated, setLastUpdated] = useState("");
 
