@@ -204,8 +204,8 @@ jobs:
             echo "::error::AURA /health did not return HTTP 200 with {ok:true} after 24 attempts (about two minutes)."
             exit 1
           fi
-          curl --fail --silent --show-error "$WORKER_URL/openapi.json" -o /tmp/aura-openapi.json
-          node -e 'const s=JSON.parse(require("fs").readFileSync("/tmp/aura-openapi.json","utf8")); const key=Object.values(s.components?.securitySchemes||{}).find(x=>x.type==="apiKey"&&x.in==="header"&&x.name==="X-AURA-API-Key"); if(!key) process.exit(1)'
+          # Public OpenAPI/docs are intentionally disabled in production. Verify the
+          # real API auth boundary directly instead of invoking schema generation.
           UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-unauthorized.json -w '%{http_code}' "$WORKER_URL/opportunities")"
           if [[ "$UNAUTH_STATUS" != "401" ]]; then
             echo "::error::Expected unauthenticated /opportunities to return 401, got $UNAUTH_STATUS"
