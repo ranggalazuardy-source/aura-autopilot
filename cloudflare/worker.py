@@ -1381,7 +1381,13 @@ async def search_research_web(payload: ResearchSearchIn, db=Depends(get_db)):
         return {"run_id": payload.run_id, "provider": "DuckDuckGo HTML", "query": payload.query,
                 "result_count": len(added), "sources": added,
                 "verification_status": "unverified"}
-    except HTTPException:
+    except HTTPException as exc:
+        # Record provider HTTP failures too; otherwise repeated upstream errors would
+        # not count toward the rolling research-search limit.
+        await db.prepare(
+            "INSERT INTO research_search_logs (id, run_id, provider, query, status, result_count, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)"
+        ).bind(log_id, payload.run_id, "duckduckgo_html", payload.query, "failed", now_iso()).run()
+        await write_audit(db, "research.web_search_failed", payload.run_id, "HTTPException")
         raise
     except Exception as exc:
         await db.prepare(
@@ -1435,9 +1441,11 @@ async def list_research_runs(db=Depends(get_db)):
 @app.post("/research/sources", dependencies=[Depends(require_api_key)])
 async def add_research_source(payload: ResearchSourceIn, db=Depends(get_db)):
     validate_public_https_url(payload.url)
-    run = await db.prepare("SELECT id FROM research_runs WHERE id = ?").bind(payload.run_id).first()
+    run = await db.prepare("SELECT id, status FROM research_runs WHERE id = ?").bind(payload.run_id).first()
     if run is None:
         raise HTTPException(404, "research run not found")
+    if run.status != "collecting":
+        raise HTTPException(409, "research run is not accepting new sources")
     if payload.opportunity_id:
         opportunity = await db.prepare("SELECT id FROM opportunities WHERE id = ?").bind(payload.opportunity_id).first()
         if opportunity is None:
