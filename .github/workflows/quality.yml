@@ -82,3 +82,38 @@ jobs:
         run: uv run pywrangler deploy --dry-run
       - name: Build local API Docker image
         run: docker build --tag aura-local-api:quality .
+      - name: Smoke test the non-root local API container
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="aura-local-api-smoke"
+          cleanup() { docker rm --force "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --detach --name "$container" \
+            --publish 127.0.0.1:8765:8000 \
+            --env AURA_API_KEY=aura-ci-only-test-key \
+            --env DATABASE_URL=sqlite:////tmp/aura-ci.db \
+            aura-local-api:quality >/dev/null
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/health -o /tmp/aura-container-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != "1" ]]; then
+            docker logs "$container"
+            echo "::error::Local API container did not become healthy."
+            exit 1
+          fi
+
+          UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-container-unauth.json -w '%{http_code}' http://127.0.0.1:8765/opportunities)"
+          [[ "$UNAUTH_STATUS" == "401" ]] || { echo "::error::Expected HTTP 401 without API key, got $UNAUTH_STATUS"; exit 1; }
+
+          curl --fail --silent --show-error \
+            -H "X-AURA-API-Key: aura-ci-only-test-key" \
+            http://127.0.0.1:8765/opportunities -o /tmp/aura-container-opportunities.json
+          node -e 'const rows=JSON.parse(require("fs").readFileSync("/tmp/aura-container-opportunities.json","utf8")); if(!Array.isArray(rows)) process.exit(1)'
+          echo "Local API container health, authentication and protected reads passed."
