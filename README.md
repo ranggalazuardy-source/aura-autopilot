@@ -92,7 +92,7 @@ The local SQLite FastAPI app under `app/main.py` is a lightweight development al
 python -m venv .venv
 .venv\\Scripts\\activate
 pip install -r requirements-local.txt
-$env:AURA_API_KEY = python -c "import secrets; print(secrets.token_urlsafe(32))"
+$env:AURA_API_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32))")
 uvicorn app.main:app --reload
 ```
 
