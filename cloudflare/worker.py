@@ -986,8 +986,62 @@ async def prepare_agent_task(task_id: str, db=Depends(get_db)):
         "task_id": task_id,
         "context": context,
         "provider_request_preview": payload,
-        "provider": provider_adapter_status(),
+        "provider": {"status": "disabled_until_owner_configuration"},
         "execution": "not_started",
+    }
+
+
+
+@app.post("/agent-tasks/{task_id}/execute", dependencies=[Depends(require_api_key)])
+async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request: Request, db=Depends(get_db)):
+    env = get_env(request)
+    if not _truthy_env(env, "AURA_MODEL_ENABLED"):
+        raise HTTPException(503, "AURA model execution is disabled")
+    if payload.provider == "cloudflare":
+        if not _truthy_env(env, "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED"):
+            raise HTTPException(403, "Owner must confirm the Cloudflare Workers Free plan before zero-cost inference")
+    elif not _truthy_env(env, "AURA_GROQ_ENABLED"):
+        raise HTTPException(403, "Groq alternative is disabled by owner configuration")
+    await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    task = await db.prepare(
+        "SELECT id, agent, objective, status FROM agent_tasks WHERE id = ?"
+    ).bind(task_id).first()
+    if task is None or task.status != "in_progress":
+        raise HTTPException(409, "Task must be in progress with a valid worker lease")
+    pack_ids = resolve_agent_skills(task.agent)
+    context = assemble_agent_context(task.agent, task.objective, pack_ids)
+    prompt_size = len(context["system_instructions"]) + len(context["task_objective"])
+    if prompt_size > MAX_MODEL_PROMPT_CHARS:
+        raise HTTPException(413, "Prepared model prompt exceeds AURA safety limit")
+    day, call_count = await reserve_model_call(db)
+    if payload.provider == "cloudflare":
+        output, model = await invoke_cloudflare_model(env, context)
+    else:
+        output, model = await invoke_groq_model(env, context)
+    output = output.strip()
+    if not output:
+        raise HTTPException(502, "Model returned an empty response")
+    artifact_id = uuid4().hex
+    await db.prepare(
+        """INSERT INTO task_execution_artifacts
+        (id, task_id, artifact_type, artifact_name, content_json, created_at)
+        VALUES (?, ?, 'agent_output', ?, ?, ?)"""
+    ).bind(
+        artifact_id, task_id, payload.provider,
+        json.dumps({"provider": payload.provider, "model": model, "output": output}),
+        now_iso(),
+    ).run()
+    await write_audit(db, "agent_task.model_executed", task_id, payload.provider + ":" + model)
+    return {
+        "task_id": task_id,
+        "provider": payload.provider,
+        "model": model,
+        "daily_call_count": call_count,
+        "daily_call_limit": MAX_MODEL_CALLS_PER_UTC_DAY,
+        "usage_day_utc": day,
+        "artifact_id": artifact_id,
+        "output": output,
+        "execution": "model_completed_owner_review_required",
     }
 
 
