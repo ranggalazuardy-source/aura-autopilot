@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 import hmac
+import json
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -668,6 +669,11 @@ async def list_agent_tasks(db=Depends(get_db)):
 
 
 # Safe, deterministic tools only. No shell, network, file access or financial actions.
+AGENT_TOOL_ALLOWLIST = {
+    agent: ["text_stats", "unit_economics"] for agent in AGENT_SKILLS
+}
+
+
 TOOL_REGISTRY = {
     "text_stats": {
         "name": "Text statistics",
@@ -789,15 +795,15 @@ async def run_agent_tool(task_id: str, payload: ToolRunIn, db=Depends(get_db)):
     task = await db.prepare("SELECT status, agent FROM agent_tasks WHERE id = ?").bind(task_id).first()
     if task is None or task.status != "in_progress":
         raise HTTPException(409, "task must be in progress")
-    if payload.tool_id not in TOOL_REGISTRY:
-        raise HTTPException(403, "tool is not registered")
+    if payload.tool_id not in TOOL_REGISTRY or payload.tool_id not in AGENT_TOOL_ALLOWLIST.get(task.agent, []):
+        raise HTTPException(403, "tool is not allowed for this agent")
     result = execute_registered_tool(payload.tool_id, payload.arguments)
     artifact_id = uuid4().hex
     await db.prepare(
         """INSERT INTO task_execution_artifacts
         (id, task_id, artifact_type, artifact_name, content_json, created_at)
         VALUES (?, ?, 'tool_result', ?, ?, ?)"""
-    ).bind(artifact_id, task_id, payload.tool_id, __import__("json").dumps(result), now_iso()).run()
+    ).bind(artifact_id, task_id, payload.tool_id, json.dumps(result), now_iso()).run()
     await write_audit(db, "agent_task.tool_executed", task_id, payload.tool_id)
     return {"task_id": task_id, "tool_id": payload.tool_id, "result": result, "artifact_id": artifact_id}
 
@@ -808,17 +814,18 @@ async def complete_agent_task(task_id: str, payload: AgentTaskCompleteIn, db=Dep
     task = await db.prepare("SELECT status FROM agent_tasks WHERE id = ?").bind(task_id).first()
     if task is None or task.status != "in_progress":
         raise HTTPException(409, "task must be in progress")
+    for evidence in payload.evidence:
+        if not isinstance(evidence, str) or len(evidence) > 2000:
+            raise HTTPException(422, "each evidence item must be a string up to 2000 characters")
     await db.prepare(
         "UPDATE agent_tasks SET status = 'completed', result_summary = ?, updated_at = ? WHERE id = ?"
     ).bind(payload.result_summary, now_iso(), task_id).run()
     for evidence in payload.evidence:
-        if not isinstance(evidence, str) or len(evidence) > 2000:
-            raise HTTPException(422, "each evidence item must be a string up to 2000 characters")
         await db.prepare(
             """INSERT INTO task_execution_artifacts
             (id, task_id, artifact_type, artifact_name, content_json, created_at)
             VALUES (?, ?, 'evidence', 'owner_or_worker_supplied', ?, ?)"""
-        ).bind(uuid4().hex, task_id, __import__("json").dumps({"evidence": evidence}), now_iso()).run()
+        ).bind(uuid4().hex, task_id, json.dumps({"evidence": evidence}), now_iso()).run()
     await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
     await write_audit(db, "agent_task.completed", task_id, payload.worker_id)
     return {"task_id": task_id, "status": "completed", "qa_status": "pending_review"}
