@@ -100,6 +100,14 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn('"/agent-tasks/"+id+"/prepare"', SOURCE)
         self.assertIn('sessionStorage.setItem("aura_agent_key"', SOURCE)
 
+
+    def test_virtual_office_exposes_provider_configuration_without_live_probe(self):
+        self.assertIn('"provider": provider_adapter_status(get_env(request))', SOURCE)
+        self.assertIn('async def virtual_office_state(request: Request, db=Depends(get_db)):', SOURCE)
+        self.assertIn('ProviderStatus provider={data?.runtime?.provider}', (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8"))
+        self.assertIn("configuration-only", SOURCE)
+        self.assertIn("does not send test requests", (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8"))
+
     def test_worker_runtime_dependencies_are_pinned(self):
         import tomllib
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

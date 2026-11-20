@@ -1284,7 +1284,7 @@ async def list_agent_tasks(db=Depends(get_db)):
 
 
 @app.get("/office/state", dependencies=[Depends(require_api_key)])
-async def virtual_office_state(db=Depends(get_db)):
+async def virtual_office_state(request: Request, db=Depends(get_db)):
     """Authenticated live snapshot for the 3D office; status is derived from D1 task and lease data."""
     now_epoch = int(datetime.now(timezone.utc).timestamp())
     task_result = await db.prepare(
@@ -1387,10 +1387,11 @@ async def virtual_office_state(db=Depends(get_db)):
         },
         "runtime": {
             "execution_mode": "bounded_lease_worker",
-            "model_provider_enabled": False,
-            "background_scheduler_enabled": False,
+            "model_provider_enabled": _truthy_env(get_env(request), "AURA_MODEL_ENABLED"),
+            "provider": provider_adapter_status(get_env(request)),
+            "background_scheduler_enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED"),
             "live_financial_execution_enabled": False,
-            "note": "A character is marked working only while its D1 task has a valid, unexpired worker lease. Queued work is idle; blocked work is waiting for owner input.",
+            "note": "Provider readiness is configuration-only; no live inference or quota test is performed by this status endpoint. A character is marked working only while its D1 task has a valid, unexpired worker lease.",
         },
     }
 

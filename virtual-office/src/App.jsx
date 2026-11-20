@@ -39,6 +39,23 @@ function TaskCard({ task }) {
     <div className="task-foot"><span>{String(task.id || "").slice(0, 10)}</span><span>{task.stale_lease ? "STALE LEASE" : task.lease_active ? "LEASE ACTIVE" : timeAgo(task.updated_at)}</span></div>
   </article>;
 }
+function ProviderStatus({ provider }) {
+  if (!provider) return null;
+  const items = [
+    { key: "cloudflare", name: "Cloudflare Workers AI", model: provider.primary_model, ready: Boolean(provider.model_enabled && provider.primary_binding_configured && provider.cloudflare_free_plan_confirmed), detail: provider.primary_binding_configured ? "AI binding configured" : "AI binding missing", primary: true },
+    { key: "groq", name: "Groq", model: provider.groq_alternative?.model, ready: Boolean(provider.groq_alternative?.enabled && provider.groq_alternative?.key_configured), detail: provider.groq_alternative?.key_configured ? "API key configured" : "API key missing" },
+    { key: "gemini", name: "Gemini", model: provider.gemini_alternative?.model, ready: Boolean(provider.gemini_alternative?.enabled && provider.gemini_alternative?.key_configured), detail: provider.gemini_alternative?.key_configured ? "API key configured" : "API key missing" }
+  ];
+  return <section className="provider-panel">
+    <div className="provider-heading"><div><span className="eyebrow">MODEL ROUTING</span><h2>AI provider status</h2></div><span className={"provider-mode " + (provider.model_enabled ? "enabled" : "disabled")}>{provider.model_enabled ? "Execution enabled" : "Execution disabled"}</span></div>
+    <div className="provider-grid">{items.map((item, index) => <article className="provider-card" key={item.key}>
+      <div className="provider-card-top"><strong>{index + 1}. {item.name}</strong><span className={"provider-state " + (item.ready ? "ready" : "off")}>{item.ready ? "READY" : "OFF / GUARDED"}</span></div>
+      <code>{item.model || "Model not configured"}</code><small>{item.detail}</small>
+    </article>)}</div>
+    <p className="provider-footnote">Fallback order: {(provider.automatic_fallback || ["cloudflare", "groq", "gemini"]).join(" → ")} · Daily safety cap: {provider.daily_call_cap ?? 5} calls. Status is configuration-only; it does not send test requests.</p>
+  </section>;
+}
+
 function LoginScreen({ value, onChange, onSubmit, error, loading }) {
   return <main className="connect-page"><div className="connect-card">
     <div className="brand-mark">A</div><p className="eyebrow">AUTONOMOUS UNIFIED REVENUE AGENT</p><h1>Virtual AI Office</h1>
@@ -157,6 +174,7 @@ export default function App() {
       <div className="metric-card"><span>ACTIVE TASKS</span><strong>{summary.active_tasks ?? "—"}</strong><small>Queued · running · blocked</small></div>
       <div className="metric-card"><span>STALE LEASES</span><strong className={summary.stale_leases ? "warning-value" : ""}>{summary.stale_leases ?? "—"}</strong><small>Needs worker recovery</small></div>
     </section>
+    <ProviderStatus provider={data?.runtime?.provider} />
     <section className="office-layout">
       <div className="scene-panel">
         <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Agency floor · 6 divisions</h2></div><span className="scene-hint">Drag to orbit · Scroll to zoom · Select an agent</span></div>

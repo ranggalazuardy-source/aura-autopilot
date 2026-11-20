@@ -1,4 +1,5 @@
 import ast
+import json
 import re
 import unittest
 from pathlib import Path
@@ -184,8 +185,11 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('state = "waiting_input"', self.source)
         self.assertIn('state = "working"', self.source)
         self.assertIn('FROM audit_log ORDER BY created_at DESC LIMIT 60', self.source)
-        self.assertIn('"background_scheduler_enabled": False', self.source)
-        self.assertIn('"model_provider_enabled": False', self.source)
+        self.assertIn('"background_scheduler_enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED")', self.source)
+        self.assertIn('"model_provider_enabled": _truthy_env(get_env(request), "AURA_MODEL_ENABLED")', self.source)
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertEqual(config["vars"]["AURA_SCHEDULER_ENABLED"], "false")
+        self.assertEqual(config["vars"]["AURA_MODEL_ENABLED"], "false")
 
     def test_virtual_office_frontend_uses_react_three_fiber_and_live_api(self):
         frontend = (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8")
