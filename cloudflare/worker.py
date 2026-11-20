@@ -114,6 +114,10 @@ class ResearchSourceIn(BaseModel):
     excerpt: str = Field(default="", max_length=5000)
 
 
+class ResearchSourceLinkIn(BaseModel):
+    opportunity_id: str = Field(min_length=8, max_length=64)
+
+
 class ResearchSourceVerifyIn(BaseModel):
     status: str = Field(pattern="^(verified|rejected)$")
     reviewer_notes: str = Field(default="", max_length=1000)
@@ -1173,6 +1177,20 @@ async def list_research_sources(run_id: str = "", opportunity_id: str = "", db=D
             FROM research_sources ORDER BY created_at DESC LIMIT 200"""
         ).all()
     return result.results.to_py()
+
+
+
+@app.post("/research/sources/{source_id}/link", dependencies=[Depends(require_api_key)])
+async def link_research_source(source_id: str, payload: ResearchSourceLinkIn, db=Depends(get_db)):
+    source = await db.prepare("SELECT id, opportunity_id FROM research_sources WHERE id = ?").bind(source_id).first()
+    if source is None:
+        raise HTTPException(404, "research source not found")
+    opportunity = await db.prepare("SELECT id FROM opportunities WHERE id = ?").bind(payload.opportunity_id).first()
+    if opportunity is None:
+        raise HTTPException(404, "opportunity not found")
+    await db.prepare("UPDATE research_sources SET opportunity_id = ? WHERE id = ?").bind(payload.opportunity_id, source_id).run()
+    await write_audit(db, "research.source_linked", source_id, payload.opportunity_id)
+    return {"source_id": source_id, "opportunity_id": payload.opportunity_id}
 
 
 @app.post("/research/sources/{source_id}/verify", dependencies=[Depends(require_api_key)])
