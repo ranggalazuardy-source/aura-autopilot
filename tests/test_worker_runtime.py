@@ -61,7 +61,9 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn("@handler", SOURCE)
         self.assertIn("async def on_scheduled(event, env, ctx):", SOURCE)
         self.assertIn('"AURA_SCHEDULER_ENABLED": "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
-        self.assertIn('"crons": ["*/15 * * * *"]', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        import json
+        config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertEqual(config["triggers"]["crons"], ["*/15 * * * *"])
         self.assertIn('"task_dispatch_enabled": False', SOURCE)
         self.assertIn('"model_provider_enabled": False', SOURCE)
 
