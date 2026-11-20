@@ -668,40 +668,50 @@ SKILL_PACKS = {
 }
 
 AGENT_SKILLS = {
-    "CEO Orchestrator": ["platform-engineering-security", "market-intelligence"],
-    "Market Intelligence": ["market-intelligence"],
-    "Content & Media": ["growth-content-commerce"],
-    "Clipping Studio": ["growth-content-commerce"],
-    "Affiliate Commerce": ["growth-content-commerce"],
-    "E-commerce / Dropship": ["growth-content-commerce"],
-    "Service Sales": ["growth-content-commerce"],
-    "Digital Products": ["growth-content-commerce"],
-    "SEO / Website": ["growth-content-commerce"],
-    "Equity Research": ["finance-investment-risk"],
-    "Crypto Research": ["finance-investment-risk"],
-    "Trading Risk Manager": ["finance-investment-risk"],
-    "Finance & Treasury": ["finance-investment-risk"],
-    "Compliance & Rights": ["market-intelligence", "growth-content-commerce", "finance-investment-risk", "platform-engineering-security"],
-    "QA / Auditor": ["market-intelligence", "growth-content-commerce", "finance-investment-risk", "platform-engineering-security"],
+    "Agents Orchestrator": ["platform-engineering-security","market-intelligence"],
+    "Business Strategist": ["market-intelligence","finance-investment-risk"],
+    "Product Trend Researcher": ["market-intelligence"],
+    "Growth Hacker": ["market-intelligence","growth-content-commerce"],
+    "Content Creator": ["growth-content-commerce"],
+    "TikTok Strategist": ["growth-content-commerce"],
+    "Instagram Curator": ["growth-content-commerce"],
+    "Video Optimization Specialist": ["growth-content-commerce"],
+    "SEO Specialist": ["growth-content-commerce","market-intelligence"],
+    "Reddit Community Builder": ["growth-content-commerce","market-intelligence"],
+    "Offer & Lead Gen Strategist": ["growth-content-commerce","market-intelligence"],
+    "Outbound Strategist": ["growth-content-commerce","market-intelligence"],
+    "Sales Outreach": ["growth-content-commerce"],
+    "Proposal Strategist": ["growth-content-commerce","finance-investment-risk"],
+    "Finance Tracker": ["finance-investment-risk"],
+    "Analytics Reporter": ["market-intelligence","growth-content-commerce","finance-investment-risk"],
+    "Legal Compliance Checker": ["market-intelligence","growth-content-commerce","finance-investment-risk","platform-engineering-security"],
+    "AI Engineer": ["platform-engineering-security"],
+    "DevOps Automator": ["platform-engineering-security"],
+    "Model QA Specialist": ["platform-engineering-security","market-intelligence","growth-content-commerce","finance-investment-risk"]
 }
 
-# Stable character identity, office zone and visual treatment for all 15 AURA agents.
+# Curated Agency Agents roles mapped into six AURA revenue divisions.
 AGENT_OFFICE_PROFILES = {
-    "CEO Orchestrator": {"title": "Chief Executive", "zone": "command", "archetype": "captain", "color": "#a78bfa", "hair": "#332b49", "tagline": "Portfolio priorities and agent coordination"},
-    "Market Intelligence": {"title": "Market Analyst", "zone": "research", "archetype": "analyst", "color": "#38bdf8", "hair": "#26384c", "tagline": "Demand, competitors and opportunity evidence"},
-    "Content & Media": {"title": "Creative Director", "zone": "studio", "archetype": "creator", "color": "#fb7185", "hair": "#4b2630", "tagline": "Original content concepts and production briefs"},
-    "Clipping Studio": {"title": "Clip Editor", "zone": "studio", "archetype": "headphones", "color": "#f97316", "hair": "#4a3024", "tagline": "Authorized footage, edits and clip packaging"},
-    "Affiliate Commerce": {"title": "Affiliate Strategist", "zone": "studio", "archetype": "glasses", "color": "#f472b6", "hair": "#4a2941", "tagline": "Product fit, disclosure and conversion economics"},
-    "E-commerce / Dropship": {"title": "Commerce Operator", "zone": "studio", "archetype": "cap", "color": "#facc15", "hair": "#4a4324", "tagline": "Supplier quality, logistics and unit margin"},
-    "Service Sales": {"title": "Client Partner", "zone": "studio", "archetype": "tie", "color": "#34d399", "hair": "#214235", "tagline": "Qualified prospects and owner-approved outreach"},
-    "Digital Products": {"title": "Product Designer", "zone": "studio", "archetype": "beret", "color": "#c084fc", "hair": "#3d2b4b", "tagline": "Original digital assets and demand validation"},
-    "SEO / Website": {"title": "SEO Strategist", "zone": "research", "archetype": "glasses", "color": "#22d3ee", "hair": "#24434a", "tagline": "Useful search-led pages and organic discovery"},
-    "Equity Research": {"title": "Equity Analyst", "zone": "finance", "archetype": "tie", "color": "#60a5fa", "hair": "#25354b", "tagline": "Fundamentals, valuation and paper watchlist"},
-    "Crypto Research": {"title": "Digital Asset Analyst", "zone": "finance", "archetype": "headphones", "color": "#fbbf24", "hair": "#4a3b1c", "tagline": "Token, custody, liquidity and protocol risk"},
-    "Trading Risk Manager": {"title": "Risk Officer", "zone": "finance", "archetype": "visor", "color": "#fb923c", "hair": "#4b3424", "tagline": "Independent veto, loss limits and stop conditions"},
-    "Finance & Treasury": {"title": "Finance Controller", "zone": "finance", "archetype": "glasses", "color": "#4ade80", "hair": "#24412b", "tagline": "Reconciliation and monthly 50/50 close"},
-    "Compliance & Rights": {"title": "Compliance Counsel", "zone": "trust", "archetype": "shield", "color": "#f87171", "hair": "#492a2a", "tagline": "Legal, platform, privacy and intellectual property"},
-    "QA / Auditor": {"title": "Quality Auditor", "zone": "trust", "archetype": "badge", "color": "#e2e8f0", "hair": "#344052", "tagline": "Evidence review, correctness and release gate"},
+    "Agents Orchestrator": {"title": "Agents Orchestrator", "division": "Executive", "zone": "command", "archetype": "captain", "color": "#a78bfa", "hair": "#31254b", "tagline": "Owns task routing, division handoffs, priorities and measurable outcomes.", "upstream_path": "specialized/agents-orchestrator.md", "specialty": "Owns task routing, division handoffs, priorities and measurable outcomes."},
+    "Business Strategist": {"title": "Business Strategist", "division": "Executive", "zone": "command", "archetype": "analyst", "color": "#c084fc", "hair": "#3b2850", "tagline": "Turns the owner’s revenue goals into a diversified, evidence-backed operating plan.", "upstream_path": "specialized/business-strategist.md", "specialty": "Turns the owner’s revenue goals into a diversified, evidence-backed operating plan."},
+    "Product Trend Researcher": {"title": "Product Trend Researcher", "division": "Research & Opportunity", "zone": "research", "archetype": "analyst", "color": "#38bdf8", "hair": "#203a4a", "tagline": "Finds emerging customer needs, product trends, market gaps and testable zero-cost opportunities.", "upstream_path": "product/product-trend-researcher.md", "specialty": "Finds emerging customer needs, product trends, market gaps and testable zero-cost opportunities."},
+    "Growth Hacker": {"title": "Growth Hacker", "division": "Research & Opportunity", "zone": "research", "archetype": "creator", "color": "#22d3ee", "hair": "#183f49", "tagline": "Runs organic acquisition experiments, referral loops and conversion improvements with measurable hypotheses.", "upstream_path": "marketing/marketing-growth-hacker.md", "specialty": "Runs organic acquisition experiments, referral loops and conversion improvements with measurable hypotheses."},
+    "Content Creator": {"title": "Content Creator", "division": "Content & Audience", "zone": "marketing", "archetype": "creator", "color": "#fb7185", "hair": "#482934", "tagline": "Creates original scripts, editorial calendars, storytelling and platform-ready content packages.", "upstream_path": "marketing/marketing-content-creator.md", "specialty": "Creates original scripts, editorial calendars, storytelling and platform-ready content packages."},
+    "TikTok Strategist": {"title": "TikTok Strategist", "division": "Content & Audience", "zone": "marketing", "archetype": "headphones", "color": "#f472b6", "hair": "#4a2941", "tagline": "Builds TikTok-native hooks, retention structures, creative tests and posting plans.", "upstream_path": "marketing/marketing-tiktok-strategist.md", "specialty": "Builds TikTok-native hooks, retention structures, creative tests and posting plans."},
+    "Instagram Curator": {"title": "Instagram Curator", "division": "Content & Audience", "zone": "marketing", "archetype": "glasses", "color": "#e879f9", "hair": "#512b4c", "tagline": "Plans Reels, carousels, visual identity and community growth for Instagram.", "upstream_path": "marketing/marketing-instagram-curator.md", "specialty": "Plans Reels, carousels, visual identity and community growth for Instagram."},
+    "Video Optimization Specialist": {"title": "Video Optimization Specialist", "division": "Content & Audience", "zone": "marketing", "archetype": "visor", "color": "#f97316", "hair": "#4b3025", "tagline": "Improves titles, thumbnails, audience retention, metadata and repurposing across video platforms.", "upstream_path": "marketing/marketing-video-optimization-specialist.md", "specialty": "Improves titles, thumbnails, audience retention, metadata and repurposing across video platforms."},
+    "SEO Specialist": {"title": "SEO Specialist", "division": "Content & Audience", "zone": "marketing", "archetype": "glasses", "color": "#06b6d4", "hair": "#24434a", "tagline": "Builds useful search-led content, keyword maps, technical/on-page audits and organic traffic plans.", "upstream_path": "marketing/marketing-seo-specialist.md", "specialty": "Builds useful search-led content, keyword maps, technical/on-page audits and organic traffic plans."},
+    "Reddit Community Builder": {"title": "Reddit Community Builder", "division": "Content & Audience", "zone": "marketing", "archetype": "headphones", "color": "#ef4444", "hair": "#49282b", "tagline": "Builds trust-led community participation and research without spam, astroturfing or undisclosed promotion.", "upstream_path": "marketing/marketing-reddit-community-builder.md", "specialty": "Builds trust-led community participation and research without spam, astroturfing or undisclosed promotion."},
+    "Offer & Lead Gen Strategist": {"title": "Offer & Lead Gen Strategist", "division": "Sales & Monetization", "zone": "sales", "archetype": "tie", "color": "#f59e0b", "hair": "#4a381d", "tagline": "Shapes offers, lead magnets and conversion paths that connect real customer pain to a clear value proposition.", "upstream_path": "sales/sales-offer-lead-gen-strategist.md", "specialty": "Shapes offers, lead magnets and conversion paths that connect real customer pain to a clear value proposition."},
+    "Outbound Strategist": {"title": "Outbound Strategist", "division": "Sales & Monetization", "zone": "sales", "archetype": "tie", "color": "#34d399", "hair": "#214235", "tagline": "Finds qualified prospects from appropriate public business signals and drafts personalized outreach sequences.", "upstream_path": "sales/sales-outbound-strategist.md", "specialty": "Finds qualified prospects from appropriate public business signals and drafts personalized outreach sequences."},
+    "Sales Outreach": {"title": "Sales Outreach", "division": "Sales & Monetization", "zone": "sales", "archetype": "tie", "color": "#10b981", "hair": "#214235", "tagline": "Prepares compliant prospecting messages, objection responses and follow-up plans for owner review.", "upstream_path": "specialized/sales-outreach.md", "specialty": "Prepares compliant prospecting messages, objection responses and follow-up plans for owner review."},
+    "Proposal Strategist": {"title": "Proposal Strategist", "division": "Sales & Monetization", "zone": "sales", "archetype": "briefcase", "color": "#84cc16", "hair": "#253b2c", "tagline": "Creates tailored service proposals, case narratives, scopes, deliverables and transparent pricing assumptions.", "upstream_path": "sales/sales-proposal-strategist.md", "specialty": "Creates tailored service proposals, case narratives, scopes, deliverables and transparent pricing assumptions."},
+    "Finance Tracker": {"title": "Finance Tracker", "division": "Operations & Finance", "zone": "operations", "archetype": "glasses", "color": "#4ade80", "hair": "#233b50", "tagline": "Tracks confirmed cash, fees, refunds, approved costs, margins and monthly owner/reinvestment proposals.", "upstream_path": "support/support-finance-tracker.md", "specialty": "Tracks confirmed cash, fees, refunds, approved costs, margins and monthly owner/reinvestment proposals."},
+    "Analytics Reporter": {"title": "Analytics Reporter", "division": "Operations & Finance", "zone": "operations", "archetype": "badge", "color": "#60a5fa", "hair": "#293a54", "tagline": "Turns validated platform and business metrics into dashboards, trends and actionable performance reports.", "upstream_path": "support/support-analytics-reporter.md", "specialty": "Turns validated platform and business metrics into dashboards, trends and actionable performance reports."},
+    "Legal Compliance Checker": {"title": "Legal Compliance Checker", "division": "Operations & Finance", "zone": "operations", "archetype": "shield", "color": "#fb7185", "hair": "#492a2a", "tagline": "Reviews platform rules, disclosures, consumer claims, privacy, contracts and intellectual-property risks; can veto.", "upstream_path": "support/support-legal-compliance-checker.md", "specialty": "Reviews platform rules, disclosures, consumer claims, privacy, contracts and intellectual-property risks; can veto."},
+    "AI Engineer": {"title": "AI Engineer", "division": "Technology & Automation", "zone": "engineering", "archetype": "tech", "color": "#818cf8", "hair": "#29294b", "tagline": "Designs model routing, agent workflows, tool boundaries, evaluations and safe automation architecture.", "upstream_path": "engineering/engineering-ai-engineer.md", "specialty": "Designs model routing, agent workflows, tool boundaries, evaluations and safe automation architecture."},
+    "DevOps Automator": {"title": "DevOps Automator", "division": "Technology & Automation", "zone": "engineering", "archetype": "tech", "color": "#94a3b8", "hair": "#29384b", "tagline": "Maintains CI/CD, Cloudflare deployment, observability, reliability, backups and rollback procedures.", "upstream_path": "engineering/engineering-devops-automator.md", "specialty": "Maintains CI/CD, Cloudflare deployment, observability, reliability, backups and rollback procedures."},
+    "Model QA Specialist": {"title": "Model QA Specialist", "division": "Technology & Automation", "zone": "engineering", "archetype": "badge", "color": "#fbbf24", "hair": "#3b3521", "tagline": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently.", "upstream_path": "specialized/specialized-model-qa.md", "specialty": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently."}
 }
 
 
@@ -813,7 +823,15 @@ def assemble_agent_context(agent: str, objective: str, pack_ids: list[str]):
     skill_blocks = []
     for pack_id in pack_ids:
         skill_blocks.append("## Assigned skill: " + pack_id + "\n" + SKILL_INSTRUCTIONS[pack_id])
-    system_message = AURA_SYSTEM_GUARDRAILS + "\n\n" + "\n\n".join(skill_blocks)
+    role_profile = AGENT_OFFICE_PROFILES.get(agent, {})
+    role_block = (
+        "## Agency Agents role: " + agent + "\\n"
+        + "Division: " + str(role_profile.get("division", "Unassigned")) + "\\n"
+        + "Specialty: " + str(role_profile.get("specialty", "Follow assigned skill packs")) + "\\n"
+        + "Upstream role reference: https://github.com/msitarzewski/agency-agents/blob/main/" + str(role_profile.get("upstream_path", "README.md")) + "\\n"
+        + "Operate only within assigned skills and AURA guardrails; provide evidence, assumptions, risks, measurable output and next action."
+    )
+    system_message = AURA_SYSTEM_GUARDRAILS + "\\n\\n" + role_block + "\\n\\n" + "\\n\\n".join(skill_blocks)
     return {
         "agent": agent,
         "system_instructions": system_message,
