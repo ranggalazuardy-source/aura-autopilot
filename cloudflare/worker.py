@@ -98,10 +98,13 @@ class ContentItemIn(BaseModel):
     pillar: str = Field(default="Manhua review", max_length=80)
     hook: str = Field(min_length=3, max_length=500)
     script: str = Field(default="", max_length=10000)
-    rights_status: str = Field(default="needs_review", pattern="^(needs_review|cleared|not_cleared)$")
 
 class ContentStatusIn(BaseModel):
     status: str = Field(pattern="^(idea|draft|in_review|approved|published|paused)$")
+
+class ContentRightsIn(BaseModel):
+    status: str = Field(pattern="^(cleared|not_cleared)$")
+    reviewer_notes: str = Field(default="", max_length=1000)
 
 class ResearchSearchIn(BaseModel):
     run_id: str = Field(min_length=8, max_length=64)
@@ -449,9 +452,9 @@ async def create_content_item(payload: ContentItemIn, db=Depends(get_db)):
     await db.prepare(
         """INSERT INTO content_items
         (id, title, platform, format, pillar, hook, script, rights_status, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idea', ?, ?)"""
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'needs_review', 'idea', ?, ?)"""
     ).bind(item_id, data["title"], data["platform"], data["format"], data["pillar"],
-           data["hook"], data["script"], data["rights_status"], now_iso(), now_iso()).run()
+           data["hook"], data["script"], now_iso(), now_iso()).run()
     await write_audit(db, "content.created", item_id, data["title"])
     return {"id": item_id, "status": "idea"}
 
@@ -477,6 +480,34 @@ async def update_content_status(content_id: str, payload: ContentStatusIn, db=De
     ).run()
     await write_audit(db, "content.status_changed", content_id, payload.status)
     return {"id": content_id, "status": payload.status, "publishing": "not_automated"}
+
+
+@app.post("/content/{content_id}/rights", dependencies=[Depends(require_api_key)])
+async def review_content_rights(content_id: str, payload: ContentRightsIn, db=Depends(get_db)):
+    existing = await db.prepare(
+        "SELECT id, status, rights_status FROM content_items WHERE id = ?"
+    ).bind(content_id).first()
+    if existing is None:
+        raise HTTPException(404, "content item not found")
+    if existing.rights_status == payload.status:
+        raise HTTPException(409, "rights status already has this decision")
+    updated = await db.prepare(
+        """UPDATE content_items
+        SET rights_status = ?, status = CASE WHEN ? = 'not_cleared' THEN 'paused' ELSE status END,
+            updated_at = ?
+        WHERE id = ? AND rights_status = ? RETURNING id"""
+    ).bind(payload.status, payload.status, now_iso(), content_id, existing.rights_status).first()
+    if updated is None:
+        raise HTTPException(409, "content rights changed; refresh before retrying")
+    await write_audit(
+        db, "content.rights_" + payload.status, content_id, payload.reviewer_notes
+    )
+    return {
+        "id": content_id,
+        "rights_status": payload.status,
+        "status": "paused" if payload.status == "not_cleared" else existing.status,
+        "publishing": "not_automated",
+    }
 
 
 # Skill catalogue is bundled with the Worker; Markdown files remain the human-readable source of truth.
