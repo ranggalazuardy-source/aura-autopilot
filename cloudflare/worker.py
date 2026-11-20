@@ -955,7 +955,7 @@ def provider_adapter_status(env=None):
         },
         "model_enabled": enabled,
         "cloudflare_free_plan_confirmed": free_plan_confirmed,
-        "transport_enabled": bool(enabled and free_plan_confirmed and cloudflare_binding),
+        "transport_enabled": bool(enabled and ((free_plan_confirmed and cloudflare_binding) or (groq_configured and _truthy_env(env, "AURA_GROQ_ENABLED")))),
         "daily_call_cap": MAX_MODEL_CALLS_PER_UTC_DAY,
         "max_output_tokens": MAX_MODEL_OUTPUT_TOKENS,
         "reason": "Inference is fail-closed until model enablement and Workers Free plan confirmation are explicitly configured.",
@@ -970,7 +970,7 @@ async def runtime_provider_status(request: Request):
 
 
 @app.post("/agent-tasks/{task_id}/prepare", dependencies=[Depends(require_api_key)])
-async def prepare_agent_task(task_id: str, db=Depends(get_db)):
+async def prepare_agent_task(task_id: str, request: Request, db=Depends(get_db)):
     task = await db.prepare(
         "SELECT id, agent, objective, status FROM agent_tasks WHERE id = ?"
     ).bind(task_id).first()
@@ -986,7 +986,7 @@ async def prepare_agent_task(task_id: str, db=Depends(get_db)):
         "task_id": task_id,
         "context": context,
         "provider_request_preview": payload,
-        "provider": {"status": "disabled_until_owner_configuration"},
+        "provider": provider_adapter_status(get_env(request)),
         "execution": "not_started",
     }
 
