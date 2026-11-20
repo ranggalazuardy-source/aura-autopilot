@@ -9,28 +9,18 @@ TREE = ast.parse(SOURCE)
 
 
 class CloudflareWorkerEntrypointTests(unittest.TestCase):
-    def test_worker_entrypoint_delegates_to_asgi_with_runtime_environment(self):
+    def test_worker_uses_official_asgi_entrypoint(self):
         entrypoint = next(
             node for node in TREE.body
-            if isinstance(node, ast.ClassDef) and node.name == "Default"
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "Default" for target in node.targets)
         )
-        self.assertTrue(any(
-            isinstance(base, ast.Name) and base.id == "WorkerEntrypoint"
-            for base in entrypoint.bases
-        ))
-        fetch = next(
-            node for node in entrypoint.body
-            if isinstance(node, ast.AsyncFunctionDef) and node.name == "fetch"
-        )
-        self.assertTrue(any(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "asgi"
-            and node.func.attr == "fetch"
-            for node in ast.walk(fetch)
-        ))
-        self.assertIn("self.env", ast.unparse(fetch))
+        self.assertIsInstance(entrypoint.value, ast.Call)
+        self.assertIsInstance(entrypoint.value.func, ast.Attribute)
+        self.assertIsInstance(entrypoint.value.func.value, ast.Name)
+        self.assertEqual(entrypoint.value.func.value.id, "asgi")
+        self.assertEqual(entrypoint.value.func.attr, "entrypoint")
+        self.assertIn("app", [arg.id for arg in entrypoint.value.args if isinstance(arg, ast.Name)])
 
     def test_worker_defines_api_key_scheme_and_safe_error_handler(self):
         self.assertIn('APIKeyHeader(name="X-AURA-API-Key"', SOURCE)
