@@ -196,7 +196,7 @@ AURA adds a public DuckDuckGo HTML search adapter for owner-initiated market res
 The dashboard includes a Research tab for the same workflow: create run → search → inspect and verify source → link source to opportunity → score → compare → record CEO recommendation. All decisions remain advisory and require owner approval.
 
 
-## 3D Virtual AI Office (v1.0.0)
+## 3D Virtual AI Office (v1.0.1)
 
 The /office/ application is a React + Three.js + React Three Fiber isometric office. Each of the 15 registered AURA agents has a persistent visual identity, role, specialty zone and a character that moves between its home workspace, working desk and owner-review area.
 
@@ -223,3 +223,37 @@ Create the production bundle before deployment:
 The `assets.base_path` setting requires Wrangler 4.148.0 or newer. Check the Wrangler version used by `pywrangler` before deployment; Cloudflare introduced this subpath feature in Wrangler 4.148.0. Wrangler serves the generated virtual-office/dist bundle under /office. Requests to /office/state miss the static asset manifest and fall through to the authenticated Python Worker API. The D1 schema must already be applied, and the Worker must have AURA_API_KEY configured.
 
 The UI can show real task state only after D1 and the Worker are deployed. When no valid lease exists, it deliberately does not animate an agent as working.
+
+
+## One-origin production deployment (v1.0.1)
+
+AURA is designed to run on one Cloudflare Worker hostname:
+- / — AURA landing page
+- /dashboard — main Operations Dashboard
+- /office/ — React Three Fiber Virtual Office
+- /office/state — authenticated live task and audit telemetry API
+
+Workers.dev is enabled so the first deployment can work without buying a domain. A custom domain can be attached later, but is not required for the single-origin setup.
+
+### One-time GitHub Actions setup
+
+The deployment workflow is .github/workflows/deploy-cloudflare.yml. It provisions or reuses the D1 database named aura-autopilot-db, applies the idempotent SQL schema, sets the Worker API secret, builds the 3D frontend, deploys the Worker, then checks the public health and page routes. It is intentionally manual (workflow_dispatch) until the account secrets have been configured.
+
+1. In Cloudflare, create an API token using the Edit Cloudflare Workers template. Restrict it to the one Cloudflare account used for AURA. Cloudflare's GitHub Actions guide uses CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as CI secrets; never put these values in source code.
+2. Get the Cloudflare Account ID from the account overview.
+3. Generate a private AURA API key in PowerShell:
+
+   $bytes = New-Object byte[] 32
+   [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+   $key = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+   Set-Clipboard $key
+
+4. In GitHub → Settings → Secrets and variables → Actions, add these repository secrets:
+   - CLOUDFLARE_API_TOKEN
+   - CLOUDFLARE_ACCOUNT_ID
+   - AURA_API_KEY
+5. In GitHub → Actions → Deploy AURA to Cloudflare → Run workflow.
+
+The deploy workflow does not create DNS records, purchase a domain, activate paid add-ons, or enable AI model spending. It uses the apac D1 location hint and the existing Workers/D1 account. Check the account's current plan and usage limits; do not approve a paid upgrade or enter payment information.
+
+After a successful deployment, the workflow summary prints the single base URL plus /dashboard and /office/. Use the same AURA API key when signing in to either page. The key is held only in the current browser tab's session storage and is never included in the frontend build.
