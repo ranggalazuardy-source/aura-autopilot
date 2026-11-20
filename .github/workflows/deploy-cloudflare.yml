@@ -184,6 +184,17 @@ jobs:
           fi
 
           echo "Checking $WORKER_URL"
+          # Start a short error-only live tail before probing the Worker. This captures
+          # uncaught Python/ASGI runtime exceptions that HTTP response bodies cannot show.
+          TAIL_LOG=/tmp/aura-worker-tail.jsonl
+          timeout 35s wrangler tail aura-autopilot-api --format json --status error --sampling-rate 1 > "$TAIL_LOG" 2>&1 &
+          TAIL_PID=$!
+          cleanup_tail() {
+            kill "$TAIL_PID" >/dev/null 2>&1 || true
+            wait "$TAIL_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup_tail EXIT
+          sleep 4
           # Cloudflare edge propagation and Python Worker cold-start can take longer than the deploy API response.
           # Allow up to two minutes, and report the HTTP status/body for every failed probe.
           HEALTH_OK=false
@@ -202,8 +213,13 @@ jobs:
           done
           if [[ "$HEALTH_OK" != "true" ]]; then
             echo "::error::AURA /health did not return HTTP 200 with {ok:true} after 24 attempts (about two minutes)."
+            echo "===== Worker live error tail ====="
+            sleep 2
+            cat "$TAIL_LOG" || true
             exit 1
           fi
+          cleanup_tail
+          trap - EXIT
           # Public OpenAPI/docs are intentionally disabled in production. Verify the
           # real API auth boundary directly instead of invoking schema generation.
           for docs_path in openapi.json docs redoc; do
