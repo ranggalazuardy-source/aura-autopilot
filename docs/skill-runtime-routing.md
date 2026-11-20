@@ -38,3 +38,21 @@ The Worker now bundles runtime instruction bodies for all four skill packs and a
 - Task objectives are kept in a separate user-message field and explicitly treated as untrusted data.
 
 This release does **not** call a model, execute external tools, launch background agents, publish content or initiate financial activity. No paid model use is enabled.
+
+
+## Bounded task execution and tool registry (v0.7.0)
+
+The Worker now has a lease-based task execution API:
+
+- `GET /tools` lists the deterministic local tools.
+- `POST /agent-tasks/claim-next` claims the highest-priority queued task and returns a short-lived worker lease.
+- `POST /agent-tasks/{task_id}/heartbeat` renews the lease.
+- `POST /agent-tasks/{task_id}/tools` runs an allowlisted local pure function under a valid lease.
+- `POST /agent-tasks/{task_id}/complete` records the worker result and evidence, then marks QA as pending.
+- `POST /agent-tasks/{task_id}/release` returns an unfinished task to the queue.
+
+The initial tools are `text_stats` and `unit_economics`. They run locally on supplied input; they do not use the network, filesystem, shell, model provider, credentials or financial accounts. Every agent has an explicit allowlist. Lease tokens are generated per claim and required for task operations. Expired leases are reclaimed when another worker requests a task.
+
+This is an execution control plane, not an autonomous AI runtime. No model is called and no agent is running in the background. A worker still needs to be started by an authorized caller. Task results are marked `qa_status=pending_review`; completion is not equivalent to independent QA approval.
+
+Apply the complete `cloudflare/schema.sql` to D1 before deployment. The schema now includes `task_execution_leases` and `task_execution_artifacts`.
