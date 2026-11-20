@@ -151,8 +151,8 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
       const slot = counts[agent.zone] || 0;
       counts[agent.zone] = slot + 1;
       const col = slot % 2, row = Math.floor(slot / 2);
-      const home = [zone.center[0] + (col - 0.5) * 2.35, 0.16, zone.center[1] + (row === 0 ? 1.25 : -1.25)];
-      const work = [zone.center[0] + (col - 0.5) * 1.8, 0.16, zone.center[1] + (row === 0 ? 0.25 : -1.0)];
+      const home = [zone.center[0] + (col - 0.5) * 2.35, 0.16, zone.center[1] + [1.45, 0, -1.45][row % 3]];
+      const work = [zone.center[0] + (col - 0.5) * 1.8, 0.16, zone.center[1] + [0.45, 0, -0.45][row % 3]];
       const waitSlot = waitingCounts.waiting || 0;
       waitingCounts.waiting = waitSlot + 1;
       const waiting = [(waitSlot % 5 - 2) * 0.5, 0.16, 1.1 + Math.floor(waitSlot / 5) * 0.52];
