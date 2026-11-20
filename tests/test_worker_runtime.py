@@ -82,6 +82,8 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn('if not _truthy_env(env, "AURA_MODEL_ENABLED"):', SOURCE)
         self.assertIn('if not _truthy_env(env, "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED"):', SOURCE)
         self.assertIn('if not _truthy_env(env, "AURA_GROQ_ENABLED"):', SOURCE)
+        self.assertIn('AURA_GROQ_FREE_TIER_CONFIRMED', SOURCE)
+        self.assertIn('Owner must confirm Groq Free tier and no billing method before use', SOURCE)
         self.assertIn("CREATE TABLE IF NOT EXISTS model_usage_daily", (ROOT / "cloudflare" / "schema.sql").read_text(encoding="utf-8"))
 
     def test_guarded_agent_console_is_registered_and_linked_from_dashboard(self):
