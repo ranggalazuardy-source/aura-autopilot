@@ -183,7 +183,7 @@ class ResearchSearchIn(BaseModel):
 
 
 class ResearchRunIn(BaseModel):
-    agent: str = Field(default="Market Intelligence", min_length=2, max_length=80)
+    agent: str = Field(default="Product Trend Researcher", min_length=2, max_length=80)
     query: str = Field(min_length=5, max_length=500)
     market_scope: str = Field(default="Indonesia", max_length=200)
 
@@ -404,7 +404,7 @@ AGENT_CONSOLE = r"""<!doctype html>
 <section class="panel"><div class="grid"><h2>Task queue</h2><div style="text-align:right"><button id="refresh">Refresh</button></div></div><div class="scroll" id="tasks"></div></section>
 <section class="panel"><h2>Task preparation preview</h2><p class="hint">Menyiapkan konteks dan skill saja. Tidak memanggil model, internet, atau menjalankan aksi.</p><div id="preview" class="muted">Pilih Prepare pada task.</div></section>
 </div></main><script>
-const agents=["CEO Orchestrator","Market Intelligence","Service Sales","Clipping Studio","Affiliate Commerce","Content & Media","E-commerce / Dropship","Digital Products","SEO / Website","Equity Research","Crypto Research","Trading Risk Manager","Finance & Treasury","Compliance & Rights","QA / Auditor"];
+const agents=["Agents Orchestrator","Business Strategist","Product Trend Researcher","Growth Hacker","Content Creator","TikTok Strategist","Instagram Curator","Video Optimization Specialist","SEO Specialist","Reddit Community Builder","Offer & Lead Gen Strategist","Outbound Strategist","Sales Outreach","Proposal Strategist","Finance Tracker","Analytics Reporter","Legal Compliance Checker","AI Engineer","DevOps Automator","Model QA Specialist"];
 let key=sessionStorage.getItem("aura_agent_key")||"";
 const el=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{"X-AURA-API-Key":key,"Content-Type":"application/json",...(opts.headers||{})}});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}if(!r.ok)throw Error(d.detail||r.statusText);return d}
@@ -765,12 +765,12 @@ script, assets, caption, CTA, disclosure and rights checklist. Use only owner-cr
 public-domain or explicitly authorized media. Clipping is not permission to reuse another
 creator's content. Track impressions, watch time, retention, clicks, leads, conversion, refunds,
 fees and net revenue separately. Run controlled experiments and do not overclaim causality.
-Content & Media: plan pillars, cadence, storyboards and original scripts; never publish without
-approval. Clipping Studio: use authorized source media only, preserve context, record permission,
-timestamps, hooks and captions. Affiliate Commerce: check product quality evidence, seller,
+Content Creator and channel strategists: plan pillars, cadence, storyboards and original scripts; never publish without
+approval. Video Optimization Specialist: optimize owner-authorized footage, preserve context, record permission,
+timestamps, hooks and captions. Growth Hacker and Offer & Lead Gen Strategist: check product quality evidence, seller,
 commission, returns, shipping and audience fit; disclose affiliate relationships; never fake
 personal experience. E-commerce: validate supplier, compliance, shipping, landed cost, payment,
-chargeback and refund risk; no orders or supplier payments without approval. Service Sales:
+chargeback and refund risk; no orders or supplier payments without approval. Outbound Strategist and Sales Outreach:
 qualify public business contacts; draft low-volume personalized outreach; no spam or sending
 without approval. Digital Products: validate demand and create original assets with rights checks.
 SEO: prioritize useful original pages; avoid doorway pages, keyword stuffing and copied content.
@@ -1212,7 +1212,7 @@ async def list_agent_skills(agent_name: str):
 
 @app.get("/agent-skills", dependencies=[Depends(require_api_key)])
 async def get_agent_skills(request: Request):
-    # Query form supports registry names that contain slashes, e.g. E-commerce / Dropship.
+    # Query form supports any registered Agency Agents role name.
     agent_name = request.query_params.get("agent", "")
     if not agent_name:
         raise HTTPException(422, "agent query parameter is required")
