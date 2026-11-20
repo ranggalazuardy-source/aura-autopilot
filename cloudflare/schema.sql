@@ -116,3 +116,27 @@ CREATE TABLE IF NOT EXISTS task_skill_routes (
 );
 CREATE INDEX IF NOT EXISTS idx_task_skill_routes_pack ON task_skill_routes(pack_id);
 
+
+
+-- Bounded task execution: one lease per task and append-only artifacts.
+CREATE TABLE IF NOT EXISTS task_execution_leases (
+    task_id TEXT PRIMARY KEY,
+    worker_id TEXT NOT NULL,
+    lease_token TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES agent_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_execution_leases_expiry ON task_execution_leases(expires_at);
+
+CREATE TABLE IF NOT EXISTS task_execution_artifacts (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    artifact_type TEXT NOT NULL CHECK(artifact_type IN ('tool_result','evidence','agent_output')),
+    artifact_name TEXT NOT NULL,
+    content_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES agent_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_execution_artifacts_task ON task_execution_artifacts(task_id, created_at);
+
