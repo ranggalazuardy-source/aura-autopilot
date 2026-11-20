@@ -4,6 +4,7 @@ from uuid import uuid4
 import hmac
 import json
 import re
+import traceback
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlencode
@@ -43,6 +44,24 @@ async def safe_validation_error_handler(request: Request, exc: RequestValidation
     return JSONResponse(
         status_code=422,
         content={"detail": sanitize_validation_data(exc.errors())},
+    )
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, exc: Exception):
+    error_id = uuid4().hex[:12]
+    print(
+        "AURA_UNHANDLED_ERROR",
+        error_id,
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+        str(exc)[:500],
+    )
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_id": error_id,
+                 "error_type": type(exc).__name__},
     )
 
 @app.middleware("http")
