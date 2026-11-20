@@ -78,3 +78,14 @@ The CEO rule recommends a zero-cost pilot only when score >= 70, confidence >= 6
 This release implements the research data model, scoring and decision-support APIs. It does not automatically search the live web, fetch the submitted URL, validate the truth of excerpts, or call an LLM. Source verification is a recorded authenticated manual review, not cryptographic proof of publisher authenticity. The SHA-256 digest proves only the exact submitted URL/excerpt string has not changed in storage. No public publishing, spending, external contact or financial execution is enabled.
 
 Apply the complete `cloudflare/schema.sql` to D1 before deployment.
+
+
+## Public web search adapter (v0.9.0)
+
+- `GET /research/provider` reports the public DuckDuckGo HTML adapter.
+- `POST /research/search` runs a query for an existing collecting research run and stores up to 10 source leads.
+- `research_search_logs` records provider, query, status and result count; the global deployment limit is 10 queries per 10 minutes.
+- Search uses a fixed provider hostname. Submitted result URLs must pass HTTPS/public-host validation before being stored.
+- Search snippets are discovery leads only. They are not facts verified by AURA. Each result is stored as `unverified` and must pass authenticated manual review before contributing to evidence confidence.
+
+The adapter makes an outbound request to DuckDuckGo's public HTML search page. It requires no paid API key, but the provider may block automated requests, change markup or impose terms/rate limits. It does not crawl full result pages or fetch arbitrary URLs. If the Cloudflare Python runtime does not expose its `js.fetch` bridge, the endpoint returns a provider-unavailable error and logs the failure.
