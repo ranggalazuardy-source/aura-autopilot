@@ -270,6 +270,13 @@ class SkillRoutingTests(unittest.TestCase):
     def test_research_source_verification_is_one_time_atomic_update(self):
         self.assertIn("WHERE id = ? AND verification_status = 'unverified' RETURNING id", self.source)
 
+    def test_research_run_close_is_atomic_single_winner(self):
+        handler = self.source.split("async def close_research_run", 1)[1].split(
+            '@app.get("/research/runs"', 1
+        )[0]
+        self.assertIn("AND status = 'collecting' RETURNING id", handler)
+        self.assertIn("research run was already closed", handler)
+
     def test_closed_research_runs_reject_manual_source_ingestion(self):
         handler = self.source.split("async def add_research_source", 1)[1].split(
             '@app.get("/research/sources"', 1
