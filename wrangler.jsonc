@@ -11,7 +11,8 @@
     "AURA_SCHEDULER_ENABLED": "false",
     "AURA_MODEL_ENABLED": "false",
     "AURA_GROQ_ENABLED": "false",
-    "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED": "false"
+    "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED": "false",
+    "AURA_GROQ_FREE_TIER_CONFIRMED": "false"
   },
   "triggers": {
     "crons": [
