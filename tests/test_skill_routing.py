@@ -270,6 +270,12 @@ class SkillRoutingTests(unittest.TestCase):
     def test_research_source_verification_is_one_time_atomic_update(self):
         self.assertIn("WHERE id = ? AND verification_status = 'unverified' RETURNING id", self.source)
 
+    def test_worker_auth_failures_use_cloudflare_rate_limit_binding(self):
+        self.assertIn('getattr(env, "AURA_AUTH_RATE_LIMITER", None)', self.source)
+        self.assertIn('await limiter.limit({"key": str(client_ip)})', self.source)
+        self.assertIn("Too many invalid API-key attempts", self.source)
+        self.assertIn("Authentication rate limiter is not configured", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
