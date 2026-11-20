@@ -46,6 +46,27 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertRegex(self.source, r'@app\.get\("/agents/\{agent_name\}/skills".*require_api_key')
         self.assertRegex(self.source, r'@app\.post\("/agent-tasks/\{task_id\}/route".*require_api_key')
 
+
+    def test_skill_loader_contains_all_runtime_instruction_bodies(self):
+        for pack_id in self.assignments["SKILL_PACKS"]:
+            with self.subTest(pack=pack_id):
+                self.assertIn('"' + pack_id + '": """', self.source)
+        self.assertIn("def assemble_agent_context", self.source)
+        self.assertIn("untrusted_task_input", self.source)
+
+    def test_provider_adapter_is_prepare_only_and_disabled(self):
+        self.assertIn("def build_openai_compatible_payload", self.source)
+        self.assertIn("def provider_adapter_status", self.source)
+        self.assertIn('"transport_enabled": False', self.source)
+        self.assertIn("No provider credentials or per-task owner-approved model budget", self.source)
+        self.assertNotIn("httpx.post(", self.source)
+        self.assertNotIn("requests.post(", self.source)
+
+    def test_task_context_prepare_endpoint_is_guarded(self):
+        self.assertRegex(self.source, r'@app\\.post\\("/agent-tasks/\\{task_id\\}/prepare".*require_api_key')
+        self.assertIn("agent_task.context_prepared", self.source)
+        self.assertIn('"execution": "not_started"', self.source)
+
     def test_router_does_not_claim_execution(self):
         self.assertIn('"execution": "not_started"', self.source)
         self.assertIn('"agent_execution": "not_automated"', self.source)
