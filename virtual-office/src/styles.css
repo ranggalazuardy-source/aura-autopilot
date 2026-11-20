@@ -33,3 +33,48 @@
 .agent-notice{width:clamp(86px,25vw,112px);padding:5px 5px 6px;border-radius:7px}.agent-notice strong{font-size:6px}.agent-notice span{font-size:7px}.agent-scene-tag{font-size:7px;padding:3px 5px}
 .scene-legend{max-width:75%;flex-wrap:wrap}.scene-gesture-hint{display:none}
 }
+
+/* AURA dark operations theme + landscape 16:9 floor. */
+:root{color-scheme:dark;color:#e7edf8;background:#080d18;--line:#253149;--muted:#93a4bd;--ink:#e7edf8;--soft:#111a2b}
+html,body{background:#080d18!important;color:#e7edf8!important}
+body{background:radial-gradient(ellipse at 50% -25%,#1b2942 0%,#0b1220 48%,#080d18 100%)!important}
+.office-app{background:transparent;color:#e7edf8}
+.topbar{border-color:#253149}.topbar h1,.side-panel h2,.side-panel h3{color:#f1f5ff}
+.eyebrow,.last-sync,.section-heading span,.side-footer,.scene-hint{color:#91a2bc}
+.ghost-button,.agent-row,.task-card,.selected-card,.side-panel,.metric-card,.scene-panel{background:#111a2b!important;border-color:#26344d!important;color:#e7edf8!important;box-shadow:0 12px 34px #0005}
+.ghost-button{color:#d8e2f3}.ghost-button:hover{background:#1a2740!important;border-color:#506080}
+.metric-card span,.metric-card small,.agent-row-copy small,.agent-row-copy em,.task-card p,.task-foot,.selected-card p{color:#9aabc4}
+.metric-card strong,.agent-row-copy strong,.task-card strong,.selected-card strong{color:#f1f5ff}
+.agent-row:hover,.agent-row.selected{background:#1b2941!important;border-color:#596b91!important}
+.agent-row{border-bottom-color:#273650}.status-pill{background:#1b2940}
+.selected-task{background:#0b1424;border-color:#2a3954}.task-card{border-color:#2b3b56}.task-state{background:#1c2940}
+.scene-canvas-wrap{width:100%;height:auto;min-height:0;aspect-ratio:16/9;border:1px solid #2b3b56;background:#0b1220}
+.scene-canvas-wrap canvas{display:block;width:100%!important;height:100%!important;min-height:0!important}
+.scene-panel{min-height:0}.office-layout{grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr)}
+.scene-heading{color:#f1f5ff}.scene-heading h2{color:#f1f5ff}
+.scene-legend,.scene-gesture-hint,.scene-controls button{background:#101a2b;color:#d9e4f5;border-color:#2d3d59}
+.scene-legend span{color:#c1cde0}.runtime-note{color:#94a6c1}
+.zone-label{background:#111a2bdd;color:#e2e8f0;border-color:#64748b!important}
+.brand-sign{background:#111a2b;color:#f8fafc;border-color:#465675}.brand-sign span{color:#9eb0ca}
+.agent-scene-tag{background:#101a2beF;color:#e5edf9;border:1px solid #31415e}
+.agent-notice{background:rgba(15,23,42,.96);border-color:#3b4c69;color:#e5edf9;box-shadow:0 6px 20px #0008}
+.agent-notice:after{background:#0f172a;border-color:#3b4c69}
+.agent-notice strong{color:#aebed4}.agent-notice.working{background:rgba(7,38,34,.97);border-color:#16745f}.agent-notice.working strong{color:#6ee7b7}
+.agent-notice.waiting_input{background:rgba(56,38,12,.97);border-color:#9a6b1e}.agent-notice.waiting_input strong{color:#fbbf24}
+.connect-page{background:radial-gradient(ellipse at 50% 0%,#1a2942,#080d18 70%);color:#e7edf8}
+.connect-card{background:#111a2b;border:1px solid #2b3b56;color:#e7edf8;box-shadow:0 20px 60px #0008}
+.connect-card h1{color:#f8fafc}.connect-copy,.fine-print{color:#9aabc4}.connect-card label{color:#b6c5da}
+.connect-card input{background:#0a1220;border-color:#34445f;color:#f1f5ff}
+.connect-card a{color:#b9a9ff}.error-note{background:#3a1e2a;color:#fecdd3}
+.division-group{margin:0 0 12px}.division-heading{display:flex;justify-content:space-between;align-items:center;padding:8px 4px;margin:2px 0 6px;border-bottom:1px solid #2b3b56;color:#c8d5e8}.division-heading strong{font-size:10px;letter-spacing:.08em;text-transform:uppercase}.division-heading span{font-size:10px;color:#8295b1}
+@media(max-width:850px){
+.office-app{padding:10px;background:transparent}.office-layout{grid-template-columns:1fr}.scene-panel{min-height:0}
+.scene-canvas-wrap{width:100%;height:auto;min-height:0;max-height:none;aspect-ratio:16/9;margin:0}
+.scene-canvas-wrap canvas{width:100%!important;height:100%!important;min-height:0!important}
+.side-panel{max-height:none;min-height:0}
+}
+@media(max-width:520px){
+.office-app{padding:8px}.scene-canvas-wrap{aspect-ratio:16/9;width:100%;height:auto;min-height:0}
+.scene-heading h2{font-size:13px}.scene-controls{top:48px}
+.metrics-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

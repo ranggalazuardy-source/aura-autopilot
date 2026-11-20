@@ -1,100 +1,148 @@
-version: 1
+version: 2
 upstream:
-  repository: https://github.com/VoltAgent/awesome-agent-skills
+  repository: https://github.com/msitarzewski/agency-agents
   branch: main
-  license_file: https://github.com/VoltAgent/awesome-agent-skills/blob/main/LICENSE
-  adoption: curated_references_and_original_aura_playbooks
-  upstream_skill_count_observed: "1497+"
+  license_file: https://github.com/msitarzewski/agency-agents/blob/main/LICENSE
+  license: MIT
+  adoption: curated_role_references_with_AURA_authored_guardrailed_runtime_prompts
   last_reviewed: "2026-11-20"
-packs:
+divisions:
+  executive:
+    label: Executive
+    agents: ["Agents Orchestrator", "Business Strategist"]
+  research-opportunity:
+    label: Research & Opportunity
+    agents: ["Product Trend Researcher", "Growth Hacker"]
+  content-audience:
+    label: Content & Audience
+    agents: ["Content Creator", "TikTok Strategist", "Instagram Curator", "Video Optimization Specialist", "SEO Specialist", "Reddit Community Builder"]
+  sales-monetization:
+    label: Sales & Monetization
+    agents: ["Offer & Lead Gen Strategist", "Outbound Strategist", "Sales Outreach", "Proposal Strategist"]
+  operations-finance:
+    label: Operations & Finance
+    agents: ["Finance Tracker", "Analytics Reporter", "Legal Compliance Checker"]
+  technology-automation:
+    label: Technology & Automation
+    agents: ["AI Engineer", "DevOps Automator", "Model QA Specialist"]
+roles:
+  "Agents Orchestrator":
+    division: "Executive"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/specialized/agents-orchestrator.md"
+    specialty: "Assigns priorities, coordinates divisions and manages task handoffs."
+    skill_packs: ["market-intelligence", "platform-engineering-security"]
+  "Business Strategist":
+    division: "Executive"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/specialized/business-strategist.md"
+    specialty: "Turns owner goals into a diversified, evidence-backed revenue strategy."
+    skill_packs: ["market-intelligence", "finance-investment-risk"]
+  "Product Trend Researcher":
+    division: "Research & Opportunity"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/product/product-trend-researcher.md"
+    specialty: "Finds customer needs, market gaps, product trends and low-cost validation tests."
+    skill_packs: ["market-intelligence"]
+  "Growth Hacker":
+    division: "Research & Opportunity"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-growth-hacker.md"
+    specialty: "Runs organic acquisition and conversion experiments with measurable hypotheses."
+    skill_packs: ["market-intelligence", "growth-content-commerce"]
+  "Content Creator":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-content-creator.md"
+    specialty: "Creates original scripts, calendars, storytelling and publishing packages."
+    skill_packs: ["growth-content-commerce"]
+  "TikTok Strategist":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-tiktok-strategist.md"
+    specialty: "Builds platform-native hooks, retention structures and creative tests."
+    skill_packs: ["growth-content-commerce"]
+  "Instagram Curator":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-instagram-curator.md"
+    specialty: "Plans Reels, carousels, visual identity and community growth."
+    skill_packs: ["growth-content-commerce"]
+  "Video Optimization Specialist":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-video-optimization-specialist.md"
+    specialty: "Improves video titles, thumbnails, retention, metadata and repurposing."
+    skill_packs: ["growth-content-commerce"]
+  "SEO Specialist":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-seo-specialist.md"
+    specialty: "Builds search-led content, keyword maps and organic traffic plans."
+    skill_packs: ["growth-content-commerce", "market-intelligence"]
+  "Reddit Community Builder":
+    division: "Content & Audience"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-reddit-community-builder.md"
+    specialty: "Builds trust-led community participation without spam or astroturfing."
+    skill_packs: ["growth-content-commerce", "market-intelligence"]
+  "Offer & Lead Gen Strategist":
+    division: "Sales & Monetization"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/sales/sales-offer-lead-gen-strategist.md"
+    specialty: "Shapes offers, lead magnets and conversion paths around customer pain."
+    skill_packs: ["growth-content-commerce", "market-intelligence"]
+  "Outbound Strategist":
+    division: "Sales & Monetization"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/sales/sales-outbound-strategist.md"
+    specialty: "Finds qualified prospects and drafts personalized outreach sequences."
+    skill_packs: ["growth-content-commerce", "market-intelligence"]
+  "Sales Outreach":
+    division: "Sales & Monetization"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/specialized/sales-outreach.md"
+    specialty: "Prepares compliant prospecting, objection responses and follow-ups for review."
+    skill_packs: ["growth-content-commerce"]
+  "Proposal Strategist":
+    division: "Sales & Monetization"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/sales/sales-proposal-strategist.md"
+    specialty: "Creates service proposals, scopes, deliverables and pricing assumptions."
+    skill_packs: ["growth-content-commerce", "finance-investment-risk"]
+  "Finance Tracker":
+    division: "Operations & Finance"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/support/support-finance-tracker.md"
+    specialty: "Tracks confirmed cash, fees, refunds, approved costs and net margin."
+    skill_packs: ["finance-investment-risk"]
+  "Analytics Reporter":
+    division: "Operations & Finance"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/support/support-analytics-reporter.md"
+    specialty: "Turns validated platform and business metrics into performance reports."
+    skill_packs: ["market-intelligence", "growth-content-commerce", "finance-investment-risk"]
+  "Legal Compliance Checker":
+    division: "Operations & Finance"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/support/support-legal-compliance-checker.md"
+    specialty: "Reviews platform rules, disclosures, privacy, claims and IP risks; can veto."
+    skill_packs: ["all packs", "policy veto"]
+  "AI Engineer":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-ai-engineer.md"
+    specialty: "Designs model routing, agent workflows, tool boundaries and evaluations."
+    skill_packs: ["platform-engineering-security"]
+  "DevOps Automator":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-devops-automator.md"
+    specialty: "Maintains CI/CD, deployment, observability, reliability and rollback."
+    skill_packs: ["platform-engineering-security"]
+  "Model QA Specialist":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/specialized/specialized-model-qa.md"
+    specialty: "Tests model outputs, evidence quality, safety and regression behavior."
+    skill_packs: ["all packs", "independent QA"]
+skill_packs:
   market-intelligence:
     file: skills/market-intelligence.md
-    agents: [CEO Orchestrator, Market Intelligence]
-    upstream:
-      - id: deanpeters/company-research
-        url: https://officialskills.sh/deanpeters/skills/company-research
-      - id: deanpeters/jobs-to-be-done
-        url: https://officialskills.sh/deanpeters/skills/jobs-to-be-done
-      - id: deanpeters/pestel-analysis
-        url: https://officialskills.sh/deanpeters/skills/pestel-analysis
-      - id: deanpeters/opportunity-solution-tree
-        url: https://officialskills.sh/deanpeters/skills/opportunity-solution-tree
-      - id: deanpeters/prioritization-advisor
-        url: https://officialskills.sh/deanpeters/skills/prioritization-advisor
-      - id: serpapi/serpapi-web-search
-        url: https://officialskills.sh/serpapi/skills/serpapi-web-search
-      - id: brave/web-search
-        url: https://officialskills.sh/brave/skills/web-search
+    purpose: Evidence-based market research, demand validation and opportunity scoring.
   growth-content-commerce:
     file: skills/growth-content-commerce.md
-    agents: [Content & Media, Clipping Studio, Affiliate Commerce, E-commerce / Dropship, Service Sales, Digital Products, SEO / Website]
-    upstream:
-      - id: coreyhaines31/content-strategy
-        url: https://officialskills.sh/coreyhaines31/skills/content-strategy
-      - id: coreyhaines31/copywriting
-        url: https://officialskills.sh/coreyhaines31/skills/copywriting
-      - id: coreyhaines31/seo-audit
-        url: https://officialskills.sh/coreyhaines31/skills/seo-audit
-      - id: coreyhaines31/analytics
-        url: https://officialskills.sh/coreyhaines31/skills/analytics
-      - id: coreyhaines31/cro
-        url: https://officialskills.sh/coreyhaines31/skills/cro
-      - id: coreyhaines31/referrals
-        url: https://officialskills.sh/coreyhaines31/skills/referrals
-      - id: coreyhaines31/sales-enablement
-        url: https://officialskills.sh/coreyhaines31/skills/sales-enablement
-      - id: realkimbarrett/offer-extraction
-        url: https://officialskills.sh/realkimbarrett/skills/offer-extraction
-      - id: realkimbarrett/scroll-stopping-creative
-        url: https://officialskills.sh/realkimbarrett/skills/scroll-stopping-creative
-      - id: realkimbarrett/conversion-path-builder
-        url: https://officialskills.sh/realkimbarrett/skills/conversion-path-builder
-      - id: realkimbarrett/generic-language-killer
-        url: https://officialskills.sh/realkimbarrett/skills/generic-language-killer
-      - id: remotion-dev/remotion
-        url: https://officialskills.sh/remotion-dev/skills/remotion
+    purpose: Original content, organic growth, affiliate and commerce research, sales drafts and conversion.
   finance-investment-risk:
     file: skills/finance-investment-risk.md
-    agents: [Finance & Treasury, Equity Research, Crypto Research, Trading Risk Manager]
-    upstream:
-      - id: deanpeters/finance-metrics-quickref
-        url: https://officialskills.sh/deanpeters/skills/finance-metrics-quickref
-      - id: deanpeters/saas-economics-efficiency-metrics
-        url: https://officialskills.sh/deanpeters/skills/saas-economics-efficiency-metrics
-      - id: binance/crypto-market-rank
-        url: https://officialskills.sh/binance/skills/crypto-market-rank
-      - id: binance/query-token-audit
-        url: https://officialskills.sh/binance/skills/query-token-audit
-      - id: binance/query-token-info
-        url: https://officialskills.sh/binance/skills/query-token-info
-      - id: binance/trading-signal
-        url: https://officialskills.sh/binance/skills/trading-signal
-      - id: binance/spot
-        url: https://officialskills.sh/binance/skills/spot
-        aura_status: blocked_live_execution
-      - id: coinbase/query-onchain-data
-        url: https://officialskills.sh/coinbase/skills/query-onchain-data
+    purpose: Cash reconciliation, margin analysis, reporting and paper-only investment research.
   platform-engineering-security:
     file: skills/platform-engineering-security.md
-    agents: [CEO Orchestrator, QA / Auditor]
-    upstream:
-      - id: voltagent/voltagent-best-practices
-        url: https://officialskills.sh/voltagent/skills/voltagent-best-practices
-      - id: cloudflare/agents-sdk
-        url: https://officialskills.sh/cloudflare/skills/agents-sdk
-      - id: cloudflare/workers-best-practices
-        url: https://officialskills.sh/cloudflare/skills/workers-best-practices
-      - id: cloudflare/wrangler
-        url: https://officialskills.sh/cloudflare/skills/wrangler
-      - id: openai/security-best-practices
-        url: https://officialskills.sh/openai/skills/security-best-practices
-      - id: openai/security-threat-model
-        url: https://officialskills.sh/openai/skills/security-threat-model
-      - id: trailofbits/static-analysis
-        url: https://officialskills.sh/trailofbits/skills/static-analysis
-      - id: trailofbits/insecure-defaults
-        url: https://officialskills.sh/trailofbits/skills/insecure-defaults
-      - id: testmu-ai/playwright-skill
-        url: https://github.com/LambdaTest/agent-skills/tree/main/playwright-skill
-      - id: openai/gh-fix-ci
-        url: https://officialskills.sh/openai/skills/gh-fix-ci
+    purpose: Agent orchestration, Cloudflare, deployment, testing, privacy and security.
+policy:
+  initial_capital_idr: 0
+  risk_level: moderate
+  owner_distribution_percent: 50
+  reinvestment_percent: 50
+  require_owner_approval_for: [spending, paid_tools, ads, subscriptions, public_publishing, external_outreach, contracts, account_changes, financial_transactions]
+  live_financial_execution: disabled
