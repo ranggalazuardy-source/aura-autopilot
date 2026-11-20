@@ -15,7 +15,7 @@ All endpoints require the AURA API key. Unknown agent names are rejected rather 
 
 ## Runtime boundary
 
-This release performs deterministic routing and persistence only. It does **not** load Markdown instructions into an LLM context, call a model, execute external tools, launch background agents, publish content, or initiate financial activity. The `file` property in the catalogue is a repository reference for the next loader stage; it is not read from the Worker filesystem.
+This release performs deterministic routing and can assemble task-scoped contexts from bundled skill instructions. It does **not** call a model, execute external tools, launch background agents, publish content or initiate financial activity. The `file` property in the catalogue remains a human-readable repository reference; runtime instructions are bundled separately in the Worker.
 
 The D1 migration in `cloudflare/schema.sql` must be applied to the Cloudflare D1 database before using task routing in a deployed Worker. Existing task rows are not automatically backfilled; call the route endpoint for each task that needs a recorded binding.
 
