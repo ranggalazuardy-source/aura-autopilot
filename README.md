@@ -86,14 +86,17 @@ uv sync
 uv run pywrangler dev
 ```
 
-The local SQLite FastAPI app under `app/main.py` remains a separate development option:
+The local SQLite FastAPI app under `app/main.py` is a lightweight development alternative, not feature parity with the Cloudflare Worker. Its private endpoints also require `AURA_API_KEY`. Generate a fresh key in PowerShell, then start it:
 
 ```powershell
 python -m venv .venv
 .venv\\Scripts\\activate
 pip install -r requirements-local.txt
+$env:AURA_API_KEY = python -c "import secrets; print(secrets.token_urlsafe(32))"
 uvicorn app.main:app --reload
 ```
+
+The local app writes to `aura.db` by default and includes a local audit log. Do not use its SQLite database as production storage. The repository's old Render blueprint was removed because it defaulted to an ephemeral SQLite database; Cloudflare Workers + D1 remains the supported deployment target.
 
 ## API overview
 
