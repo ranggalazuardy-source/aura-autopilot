@@ -60,7 +60,10 @@ jobs:
           mkdir -p .deploy-tools
           printf '{"private":true}\n' > .deploy-tools/package.json
           npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.148.0
-          echo "$GITHUB_WORKSPACE/.deploy-tools/node_modules/.bin" >> "$GITHUB_PATH"
+          WRANGLER_BIN="$GITHUB_WORKSPACE/.deploy-tools/node_modules/.bin"
+          echo "$WRANGLER_BIN" >> "$GITHUB_PATH"
+          export PATH="$WRANGLER_BIN:$PATH"
+          command -v wrangler
           wrangler --version
 
       - name: Install Python Worker dependencies
