@@ -157,7 +157,7 @@ CREATE INDEX IF NOT EXISTS idx_research_runs_started ON research_runs(started_at
 CREATE TABLE IF NOT EXISTS research_sources (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
-    opportunity_id TEXT NOT NULL DEFAULT '',
+    opportunity_id TEXT,
     title TEXT NOT NULL,
     url TEXT NOT NULL,
     publisher TEXT NOT NULL,
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS research_sources (
     reviewer_notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     FOREIGN KEY(run_id) REFERENCES research_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY(opportunity_id) REFERENCES opportunities(id) ON DELETE SET DEFAULT
+    FOREIGN KEY(opportunity_id) REFERENCES opportunities(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_research_sources_run ON research_sources(run_id);
 CREATE INDEX IF NOT EXISTS idx_research_sources_opportunity ON research_sources(opportunity_id);
@@ -201,7 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_market_comparisons_created ON market_comparisons(
 CREATE TABLE IF NOT EXISTS ceo_decisions (
     id TEXT PRIMARY KEY,
     comparison_id TEXT NOT NULL,
-    selected_opportunity_id TEXT NOT NULL DEFAULT '',
+    selected_opportunity_id TEXT,
     decision TEXT NOT NULL CHECK(decision IN ('recommend_pilot','collect_evidence','deprioritize')),
     rationale TEXT NOT NULL,
     owner_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(owner_approval_required = 1),
