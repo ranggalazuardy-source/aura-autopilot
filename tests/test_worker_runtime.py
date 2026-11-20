@@ -65,6 +65,14 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn('"task_dispatch_enabled": False', SOURCE)
         self.assertIn('"model_provider_enabled": False', SOURCE)
 
+    def test_guarded_agent_console_is_registered_and_linked_from_dashboard(self):
+        self.assertIn('AGENT_CONSOLE =', SOURCE)
+        self.assertIn('@app.get("/agents", response_class=HTMLResponse', SOURCE)
+        self.assertIn('async def agent_console():', SOURCE)
+        self.assertIn('href="/agents"', SOURCE)
+        self.assertIn('"/agent-tasks/"+id+"/prepare"', SOURCE)
+        self.assertIn('sessionStorage.setItem("aura_agent_key"', SOURCE)
+
     def test_worker_runtime_dependencies_are_pinned(self):
         import tomllib
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
