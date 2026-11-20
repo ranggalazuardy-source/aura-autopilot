@@ -172,7 +172,7 @@ class SkillRoutingTests(unittest.TestCase):
                         profiles = ast.literal_eval(node.value)
         self.assertEqual(set(profiles), set(self.assignments["AGENT_SKILLS"]))
         self.assertEqual(len(profiles), 20)
-        self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "studio", "finance", "trust"})
+        self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "marketing", "sales", "operations", "engineering"})
 
     def test_virtual_office_state_uses_live_tasks_leases_and_audit_logs(self):
         self.assertIn('@app.get("/office/state", dependencies=[Depends(require_api_key)])', self.source)
