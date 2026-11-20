@@ -179,85 +179,79 @@ jobs:
           set -euo pipefail
           WORKER_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' /tmp/aura-deploy.log | tail -n 1 || true)"
           if [[ -z "$WORKER_URL" ]]; then
-            echo "::error::The deploy output did not include a workers.dev URL. Check whether the workers.dev subdomain is enabled for this account."
+            echo "::error::The deploy output did not include a workers.dev URL."
             exit 1
           fi
 
           echo "Checking $WORKER_URL"
-          # Start a short error-only live tail before probing the Worker. This captures
-          # uncaught Python/ASGI runtime exceptions that HTTP response bodies cannot show.
           TAIL_LOG=/tmp/aura-worker-tail.jsonl
-          timeout 35s wrangler tail aura-autopilot-api --format json --status error --sampling-rate 1 > "$TAIL_LOG" 2>&1 &
+          timeout 90s wrangler tail aura-autopilot-api --format json --sampling-rate 1 > "$TAIL_LOG" 2>&1 &
           TAIL_PID=$!
           cleanup_tail() {
             kill "$TAIL_PID" >/dev/null 2>&1 || true
             wait "$TAIL_PID" >/dev/null 2>&1 || true
           }
+          dump_diagnostics() {
+            echo "===== Cloudflare Worker live logs ====="
+            cat "$TAIL_LOG" || true
+          }
           trap cleanup_tail EXIT
-          sleep 4
-          # Cloudflare edge propagation and Python Worker cold-start can take longer than the deploy API response.
-          # Allow up to two minutes, and report the HTTP status/body for every failed probe.
+
+          check_status() {
+            local label="$1" expected="$2" path="$3" header_name="${4:-}" header_value="${5:-}"
+            local safe_name="${label//[^A-Za-z0-9_-]/_}" body="/tmp/aura-probe-${safe_name}.body"
+            local status
+            if [[ -n "$header_name" ]]; then
+              status="$(curl --silent --show-error --max-time 25 -o "$body" -w '%{http_code}' -H "$header_name: $header_value" "$WORKER_URL$path" || true)"
+            else
+              status="$(curl --silent --show-error --max-time 25 -o "$body" -w '%{http_code}' "$WORKER_URL$path" || true)"
+            fi
+            echo "Probe $label: HTTP ${status:-no-response} (expected $expected)"
+            if [[ "$status" != "$expected" ]]; then
+              echo "::error::Probe $label failed."
+              [[ -f "$body" ]] && head -c 1200 "$body" && echo
+              dump_diagnostics
+              exit 1
+            fi
+          }
+
+          sleep 3
           HEALTH_OK=false
           for attempt in {1..24}; do
             HEALTH_STATUS="$(curl --silent --show-error --max-time 20 -o /tmp/aura-health.json -w '%{http_code}' "$WORKER_URL/health" || true)"
             if [[ "$HEALTH_STATUS" == "200" ]] && node -e 'try { const h=JSON.parse(require("fs").readFileSync("/tmp/aura-health.json","utf8")); process.exit(h.ok===true ? 0 : 1); } catch { process.exit(1); }'; then
               HEALTH_OK=true
+              echo "Probe /health: HTTP 200 and {ok:true}"
               break
             fi
             echo "Health check attempt $attempt/24 failed (HTTP ${HEALTH_STATUS:-no-response})."
-            if [[ -s /tmp/aura-health.json ]]; then
-              head -c 500 /tmp/aura-health.json
-              echo
-            fi
+            [[ -s /tmp/aura-health.json ]] && head -c 500 /tmp/aura-health.json && echo
             sleep 5
           done
           if [[ "$HEALTH_OK" != "true" ]]; then
-            echo "::error::AURA /health did not return HTTP 200 with {ok:true} after 24 attempts (about two minutes)."
-            echo "===== Worker live error tail ====="
-            sleep 2
-            cat "$TAIL_LOG" || true
+            echo "::error::AURA /health did not return HTTP 200 with {ok:true}."
+            dump_diagnostics
             exit 1
           fi
+
+          for docs_path in openapi.json docs redoc; do
+            check_status "docs-$docs_path" 404 "/$docs_path"
+          done
+          check_status "unauthenticated-opportunities" 401 "/opportunities"
+          check_status "unauthenticated-office-state" 401 "/office/state"
+          check_status "root-html" 200 "/"
+          grep -qi "AURA" /tmp/aura-probe-root-html.body || { echo "::error::Root HTML missing AURA marker"; dump_diagnostics; exit 1; }
+          check_status "dashboard-html" 200 "/dashboard"
+          grep -qi "AURA" /tmp/aura-probe-dashboard-html.body || { echo "::error::Dashboard HTML missing AURA marker"; dump_diagnostics; exit 1; }
+          check_status "office-static" 200 "/office/"
+          grep -qi "Virtual AI Office" /tmp/aura-probe-office-static.body || { echo "::error::Virtual Office HTML marker missing"; dump_diagnostics; exit 1; }
+          check_status "authenticated-office-state" 200 "/office/state" "X-AURA-API-Key" "$AURA_API_KEY"
+          for endpoint in opportunities approvals content ledger ledger/summary; do
+            check_status "authenticated-$endpoint" 200 "/$endpoint" "X-AURA-API-Key" "$AURA_API_KEY"
+          done
+
           cleanup_tail
           trap - EXIT
-          # Public OpenAPI/docs are intentionally disabled in production. Verify the
-          # real API auth boundary directly instead of invoking schema generation.
-          for docs_path in openapi.json docs redoc; do
-            docs_status="$(curl --silent --show-error -o /dev/null -w '%{http_code}' "$WORKER_URL/$docs_path")"
-            if [[ "$docs_status" != "404" ]]; then
-              echo "::error::Expected production docs route /$docs_path to be disabled (404), got $docs_status"
-              exit 1
-            fi
-          done
-          UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-unauthorized.json -w '%{http_code}' "$WORKER_URL/opportunities")"
-          if [[ "$UNAUTH_STATUS" != "401" ]]; then
-            echo "::error::Expected unauthenticated /opportunities to return 401, got $UNAUTH_STATUS"
-            exit 1
-          fi
-          OFFICE_UNAUTH_STATUS="$(curl --silent --show-error -o /tmp/aura-office-unauthorized.json -w '%{http_code}' "$WORKER_URL/office/state")"
-          if [[ "$OFFICE_UNAUTH_STATUS" != "401" ]]; then
-            echo "::error::Expected unauthenticated /office/state to return 401, got $OFFICE_UNAUTH_STATUS"
-            exit 1
-          fi
-          curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html
-          grep -q "AURA" /tmp/aura-root.html
-          curl --fail --silent --show-error "$WORKER_URL/dashboard" -o /tmp/aura-dashboard.html
-          grep -q "AURA" /tmp/aura-dashboard.html
-          curl --fail --silent --show-error "$WORKER_URL/office/" -o /tmp/aura-office.html
-          grep -q "Virtual AI Office" /tmp/aura-office.html
-          curl --fail --silent --show-error \
-            -H "X-AURA-API-Key: $AURA_API_KEY" \
-            "$WORKER_URL/office/state" > /tmp/aura-office-state.json
-
-          # Verify the dashboard's core authenticated data endpoints, not only the virtual office.
-          for endpoint in opportunities approvals content ledger ledger/summary; do
-            response_file="/tmp/aura-${endpoint//\//-}.json"
-            echo "Checking authenticated endpoint: /$endpoint"
-            curl --fail --silent --show-error \
-              -H "X-AURA-API-Key: $AURA_API_KEY" \
-              "$WORKER_URL/$endpoint" -o "$response_file"
-          done
-
           echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
           {
             echo "## AURA deployment successful"
@@ -267,5 +261,5 @@ jobs:
             echo "- Main dashboard: $WORKER_URL/dashboard"
             echo "- 3D Virtual Office: $WORKER_URL/office/"
             echo "- Health: $WORKER_URL/health"
-            echo "- Authenticated office telemetry: verified"
+            echo "- Authenticated office telemetry and core API endpoints: verified"
           } >> "$GITHUB_STEP_SUMMARY"
