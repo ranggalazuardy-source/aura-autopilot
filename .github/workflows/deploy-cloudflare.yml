@@ -184,16 +184,16 @@ jobs:
           fi
 
           echo "Checking $WORKER_URL"
-          # Cloudflare may need a short propagation/startup window after deployment.
-          # Retry health checks and report the exact HTTP/body failure instead of exiting silently.
+          # Cloudflare edge propagation and Python Worker cold-start can take longer than the deploy API response.
+          # Allow up to two minutes, and report the HTTP status/body for every failed probe.
           HEALTH_OK=false
-          for attempt in {1..8}; do
+          for attempt in {1..24}; do
             HEALTH_STATUS="$(curl --silent --show-error --max-time 20 -o /tmp/aura-health.json -w '%{http_code}' "$WORKER_URL/health" || true)"
             if [[ "$HEALTH_STATUS" == "200" ]] && node -e 'try { const h=JSON.parse(require("fs").readFileSync("/tmp/aura-health.json","utf8")); process.exit(h.ok===true ? 0 : 1); } catch { process.exit(1); }'; then
               HEALTH_OK=true
               break
             fi
-            echo "Health check attempt $attempt/8 failed (HTTP ${HEALTH_STATUS:-no-response})."
+            echo "Health check attempt $attempt/24 failed (HTTP ${HEALTH_STATUS:-no-response})."
             if [[ -s /tmp/aura-health.json ]]; then
               head -c 500 /tmp/aura-health.json
               echo
@@ -201,7 +201,7 @@ jobs:
             sleep 5
           done
           if [[ "$HEALTH_OK" != "true" ]]; then
-            echo "::error::AURA /health did not return HTTP 200 with {ok:true} after 8 attempts."
+            echo "::error::AURA /health did not return HTTP 200 with {ok:true} after 24 attempts (about two minutes)."
             exit 1
           fi
           curl --fail --silent --show-error "$WORKER_URL/openapi.json" -o /tmp/aura-openapi.json
