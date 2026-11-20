@@ -65,7 +65,7 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('"automatic_fallback": ["cloudflare", "groq", "gemini"]', self.source)
         self.assertIn('("cloudflare", "groq", "gemini")', self.source)
         self.assertIn("exc.status_code in (429, 502, 503, 504)", self.source)
-        self.assertIn("billing, configuration and invalid-request errors stop execution", self.source)
+        self.assertIn("billing, authentication, configuration and invalid-request errors stop execution", self.source)
         self.assertNotIn("requests.post(", self.source)
 
     def test_task_context_prepare_endpoint_is_guarded(self):
