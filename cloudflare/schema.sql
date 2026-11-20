@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS opportunity_scores (
     score REAL NOT NULL CHECK(score >= 0 AND score <= 100),
     confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 100),
     verified_sources INTEGER NOT NULL DEFAULT 0,
-    independent_publishers INTEGER NOT NULL DEFAULT 0,
+    distinct_publishers INTEGER NOT NULL DEFAULT 0,
     recommendation TEXT NOT NULL,
     rationale TEXT NOT NULL,
     scored_at TEXT NOT NULL,
