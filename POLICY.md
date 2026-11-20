@@ -10,4 +10,6 @@
 8. Track revenue only when confirmed by platform/merchant reporting; distinguish estimates from received funds.
 9. Preserve source attribution and content provenance. Use original or licensed media.
 10. Stop an integration on repeated auth failures, policy warnings, unusual spend, or suspicious activity.
-11. No production deployment until authentication, authorization, durable storage, rate limiting, backups, monitoring and secret management are in place.
+11. Production deployment requires authenticated private endpoints, Cloudflare-native throttling of invalid API-key attempts, D1 durable storage with Time Travel recovery, Worker Logs, and secret management.
+12. On the Cloudflare Free plan, D1 Time Travel provides up to 7 days of point-in-time recovery and Workers Logs retain up to 3 days (with a 200,000-log daily write allowance). These are limited recovery/observability windows, not a substitute for longer-term offsite exports where required.
+13. Cloudflare's Rate Limiting API is approximate and regional; it is a protective abuse throttle, not a globally strict quota or financial spending control.
