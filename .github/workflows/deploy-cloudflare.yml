@@ -158,7 +158,8 @@ jobs:
 
           echo "Checking $WORKER_URL"
           curl --fail --silent --show-error "$WORKER_URL/health" -o /tmp/aura-health.json
-          grep -q "Operations Dashboard" <(curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html && cat /tmp/aura-root.html)
+          curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html
+          grep -q "Operations Dashboard" /tmp/aura-root.html
           curl --fail --silent --show-error "$WORKER_URL/dashboard" -o /tmp/aura-dashboard.html
           grep -q "AURA" /tmp/aura-dashboard.html
           curl --fail --silent --show-error "$WORKER_URL/office/" -o /tmp/aura-office.html
