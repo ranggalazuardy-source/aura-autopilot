@@ -1,14 +1,20 @@
 [project]
 name = "aura-autopilot"
-version = "1.0.1"
+version = "1.0.2"
 description = "AURA guarded multi-agent revenue operations API with skill context loading"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi",
+    "fastapi==0.165.0",
 ]
 
 [dependency-groups]
 dev = [
     "workers-py",
     "workers-runtime-sdk",
+    "uvicorn[standard]==0.54.0",
+    "sqlalchemy==2.1.9",
+    "psycopg[binary]==3.3.9",
+    "pydantic==2.14.4",
+    "httpx==0.28.1",
+    "pip-audit",
 ]
