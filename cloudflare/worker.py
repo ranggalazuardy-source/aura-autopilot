@@ -977,7 +977,7 @@ async def add_research_source(payload: ResearchSourceIn, db=Depends(get_db)):
         (id, run_id, opportunity_id, title, url, publisher, source_type, published_at,
          excerpt, content_hash, verification_status, reviewer_notes, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unverified', '', ?)"""
-    ).bind(source_id, payload.run_id, payload.opportunity_id, payload.title, payload.url,
+    ).bind(source_id, payload.run_id, payload.opportunity_id or None, payload.title, payload.url,
            payload.publisher, payload.source_type, payload.published_at, payload.excerpt,
            digest, now_iso()).run()
     await write_audit(db, "research.source_added", source_id, payload.publisher)
@@ -1125,7 +1125,7 @@ async def record_ceo_decision(payload: CEODecisionIn, db=Depends(get_db)):
         """INSERT INTO ceo_decisions
         (id, comparison_id, selected_opportunity_id, decision, rationale, owner_approval_required, created_at)
         VALUES (?, ?, ?, ?, ?, 1, ?)"""
-    ).bind(decision_id, payload.comparison_id, payload.selected_opportunity_id,
+    ).bind(decision_id, payload.comparison_id, payload.selected_opportunity_id or None,
            payload.decision, payload.rationale, now_iso()).run()
     await write_audit(db, "ceo.decision_recorded", decision_id, payload.decision)
     return {"id": decision_id, "decision": payload.decision,
