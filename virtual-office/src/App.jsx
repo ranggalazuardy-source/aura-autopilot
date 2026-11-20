@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import OfficeScene from "./OfficeScene.jsx";
 
+const DIVISION_ORDER = ["Executive", "Research & Opportunity", "Content & Audience", "Sales & Monetization", "Operations & Finance", "Technology & Automation"];
 const STATUS = {
   working: { label: "Working", className: "working" },
   waiting_input: { label: "Waiting for input", className: "waiting" },
@@ -27,7 +28,7 @@ function AgentRow({ agent, selected, onClick }) {
   const status = STATUS[agent.status] || STATUS.idle;
   return <button className={"agent-row " + (selected ? "selected" : "")} onClick={onClick}>
     <span className="agent-avatar" style={{ background: agent.color }}>{agent.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
-    <span className="agent-row-copy"><strong>{agent.name}</strong><small>{agent.title} · {agent.zone}</small>{agent.current_task && <em>{agent.current_task.objective}</em>}</span>
+    <span className="agent-row-copy"><strong>{agent.name}</strong><small>{agent.division || agent.zone}</small>{agent.current_task && <em>{agent.current_task.objective}</em>}</span>
     <span className={"status-pill " + status.className}><i />{status.label}</span>
   </button>;
 }
@@ -158,20 +159,24 @@ export default function App() {
     </section>
     <section className="office-layout">
       <div className="scene-panel">
-        <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Agent workspace</h2></div><span className="scene-hint">Drag to orbit · Scroll to zoom · Select an agent</span></div>
+        <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Agency floor · 6 divisions</h2></div><span className="scene-hint">Drag to orbit · Scroll to zoom · Select an agent</span></div>
         {data ? <OfficeScene agents={agents} selectedAgent={selected?.name || selectedAgent} onSelectAgent={setSelectedAgent} /> : <div className="scene-loading">Waiting for authenticated office telemetry…</div>}
         <div className="scene-legend"><span><i className="legend-dot working" /> Working</span><span><i className="legend-dot waiting" /> Waiting for input</span><span><i className="legend-dot idle" /> Idle</span></div>
         <div className="runtime-note">{data?.runtime?.model_provider_enabled ? "Model provider enabled" : "Model inference disabled"}<span> · {data?.runtime?.background_scheduler_enabled ? "Scheduler enabled" : "No background scheduler"}</span></div>
       </div>
       <aside className="side-panel">
-        <div className="side-header"><div><span className="eyebrow">OPERATIONS FEED</span><h2>Office overview</h2></div><span className="agent-total">{summary.agents_total || agents.length || 0} AGENTS</span></div>
+        <div className="side-header"><div><span className="eyebrow">OPERATIONS FEED</span><h2>Office overview · 6 divisions</h2></div><span className="agent-total">{summary.agents_total || agents.length || 0} AGENTS</span></div>
         {selected && <div className="selected-card">
           <div className="selected-top"><span className="selected-avatar" style={{ background: selected.color }}>{selected.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><div><span className="eyebrow">SELECTED AGENT</span><strong>{selected.name}</strong><small>{selected.title}</small></div><span className={"status-pill " + (STATUS[selected.status] || STATUS.idle).className}><i />{(STATUS[selected.status] || STATUS.idle).label}</span></div>
           <p>{selected.tagline}</p>
           {selected.current_task && <div className="selected-task"><small>CURRENT TASK</small><span>{selected.current_task.objective}</span>{selected.current_task.stale_lease && <em>Lease expired or missing — not counted as working</em>}</div>}
         </div>}
         <section className="side-section"><div className="section-heading"><h3>Agent roster</h3><span>{agents.length} registered</span></div><div className="agent-list">
-          {agents.map((agent) => <AgentRow key={agent.name} agent={agent} selected={selected?.name === agent.name} onClick={() => setSelectedAgent(agent.name)} />)}
+          {DIVISION_ORDER.map((division) => {
+            const members = agents.filter((agent) => agent.division === division);
+            return members.length ? <section className="division-group" key={division}><div className="division-heading"><strong>{division}</strong><span>{members.length} agents</span></div>{members.map((agent) => <AgentRow key={agent.name} agent={agent} selected={selected?.name === agent.name} onClick={() => setSelectedAgent(agent.name)} />)}</section> : null;
+          })}
+          {agents.filter((agent) => !DIVISION_ORDER.includes(agent.division)).map((agent) => <AgentRow key={agent.name} agent={agent} selected={selected?.name === agent.name} onClick={() => setSelectedAgent(agent.name)} />)}
           {!agents.length && <p className="empty-state">Agent profiles will appear when the office API is available.</p>}
         </div></section>
         <section className="side-section"><div className="section-heading"><h3>Active tasks</h3><span>{tasks.length} open</span></div>
