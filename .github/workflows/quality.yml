@@ -34,7 +34,7 @@ jobs:
       - name: Install and audit the exact Wrangler CLI used for production deploy
         run: |
           mkdir -p .deploy-tools
-          printf '{"private":true}\\n' > .deploy-tools/package.json
+          echo '{"private":true}' > .deploy-tools/package.json
           npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.165.0
           npm audit --prefix .deploy-tools --audit-level=high
           .deploy-tools/node_modules/.bin/wrangler --version
