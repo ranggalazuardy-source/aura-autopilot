@@ -8,14 +8,17 @@ const STATUS = {
 };
 function timeAgo(value) {
   if (!value) return "—";
-  const seconds = Math.floor(Math.max(0, Date.now() - new Date(value).getTime()) / 1000);
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "—";
+  const seconds = Math.floor(Math.max(0, Date.now() - timestamp) / 1000);
   if (seconds < 60) return seconds + "s ago";
   if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
   if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
   return new Date(value).toLocaleDateString("id-ID");
 }
 function formatTimestamp(value) {
-  return value ? new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+  if (!value || !Number.isFinite(new Date(value).getTime())) return "—";
+  return new Date(value).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 function stateLabel(value) {
   return ({ queued: "Queued", in_progress: "In progress", blocked: "Waiting", completed: "Completed", cancelled: "Cancelled" })[value] || value || "Unknown";
@@ -35,11 +38,11 @@ function TaskCard({ task }) {
     <div className="task-foot"><span>{String(task.id || "").slice(0, 10)}</span><span>{task.stale_lease ? "STALE LEASE" : task.lease_active ? "LEASE ACTIVE" : timeAgo(task.updated_at)}</span></div>
   </article>;
 }
-function LoginScreen({ value, onChange, onSubmit, error }) {
+function LoginScreen({ value, onChange, onSubmit, error, loading }) {
   return <main className="connect-page"><div className="connect-card">
     <div className="brand-mark">A</div><p className="eyebrow">AUTONOMOUS UNIFIED REVENUE AGENT</p><h1>Virtual AI Office</h1>
     <p className="connect-copy">Masuk menggunakan API key AURA yang sama dengan Operations Dashboard. Key disimpan hanya di session browser ini.</p>
-    <form onSubmit={onSubmit}><label htmlFor="api-key">AURA API key</label><input id="api-key" type="password" autoComplete="current-password" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Paste AURA_API_KEY" required /><button className="primary-button" type="submit">Connect to office</button></form>
+    <form onSubmit={onSubmit}><label htmlFor="api-key">AURA API key</label><input id="api-key" type="password" autoComplete="current-password" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Paste AURA_API_KEY" required /><button className="primary-button" type="submit" disabled={loading}>{loading ? "Connecting…" : "Connect to office"}</button></form>
     {error && <div className="error-note">{error}</div>}
     <a href="/dashboard">← Back to operations dashboard</a>
     <p className="fine-print">No credentials are embedded in the app. Never paste passwords, OTPs or recovery codes here.</p>
@@ -59,16 +62,40 @@ export default function App() {
     const response = await fetch("/office/state", { headers: { "X-AURA-API-Key": secret, "Accept": "application/json" }, cache: "no-store" });
     let payload = {};
     try { payload = await response.json(); } catch (err) { /* parse failure is reported as HTTP error */ }
-    if (!response.ok) throw new Error(payload.detail || ("Office API returned HTTP " + response.status));
-    setData(payload); setLastUpdated(payload.generated_at || new Date().toISOString()); setError("");
+    if (!response.ok) {
+      const failure = new Error(payload.detail || ("Office API returned HTTP " + response.status));
+      failure.status = response.status;
+      throw failure;
+    }
+    return payload;
   }, []);
 
   useEffect(() => {
     if (!apiKey) return undefined;
     let mounted = true;
+    let inFlight = false;
     const poll = async () => {
-      try { await loadState(apiKey); }
-      catch (err) { if (mounted) setError(err.message || "Could not refresh office state"); }
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const payload = await loadState(apiKey);
+        if (!mounted) return;
+        setData(payload);
+        setLastUpdated(payload.generated_at || new Date().toISOString());
+        setError("");
+      } catch (err) {
+        if (!mounted) return;
+        if (err.status === 401) {
+          sessionStorage.removeItem("aura_key");
+          setData(null);
+          setApiKey("");
+          setError("API key is no longer valid. Connect again with the current AURA API key.");
+        } else {
+          setError(err.message || "Could not refresh office state");
+        }
+      } finally {
+        inFlight = false;
+      }
     };
     poll();
     const timer = window.setInterval(poll, 5000);
@@ -80,22 +107,42 @@ export default function App() {
     const secret = draftKey.trim();
     if (!secret) return;
     setLoading(true);
-    try { await loadState(secret); sessionStorage.setItem("aura_key", secret); setApiKey(secret); setDraftKey(""); }
-    catch (err) { setError(err.message || "Connection failed"); }
+    try {
+      const payload = await loadState(secret);
+      setData(payload);
+      setLastUpdated(payload.generated_at || new Date().toISOString());
+      setError("");
+      sessionStorage.setItem("aura_key", secret);
+      setApiKey(secret);
+      setDraftKey("");
+    } catch (err) { setError(err.message || "Connection failed"); }
     finally { setLoading(false); }
   };
   const refresh = async () => {
     if (!apiKey) return;
     setLoading(true);
-    try { await loadState(apiKey); } catch (err) { setError(err.message || "Refresh failed"); }
-    finally { setLoading(false); }
+    try {
+      const payload = await loadState(apiKey);
+      setData(payload);
+      setLastUpdated(payload.generated_at || new Date().toISOString());
+      setError("");
+    } catch (err) {
+      if (err.status === 401) {
+        sessionStorage.removeItem("aura_key");
+        setData(null);
+        setApiKey("");
+        setError("API key is no longer valid. Connect again with the current AURA API key.");
+      } else {
+        setError(err.message || "Refresh failed");
+      }
+    } finally { setLoading(false); }
   };
   const lock = () => { sessionStorage.removeItem("aura_key"); setApiKey(""); setData(null); setDraftKey(""); };
   const agents = data?.agents || [], tasks = data?.active_tasks || [], logs = data?.logs || [], summary = data?.summary || {};
   const selected = agents.find((agent) => agent.name === selectedAgent) || agents[0] || null;
   const visibleTasks = useMemo(() => taskFilter === "all" ? tasks : tasks.filter((task) => task.status === taskFilter), [tasks, taskFilter]);
 
-  if (!apiKey) return <LoginScreen value={draftKey} onChange={setDraftKey} onSubmit={connect} error={error} />;
+  if (!apiKey) return <LoginScreen value={draftKey} onChange={setDraftKey} onSubmit={connect} error={error} loading={loading} />;
 
   return <main className="office-app">
     <header className="topbar">
