@@ -73,7 +73,9 @@ Deploy:
 uv run pywrangler deploy
 ```
 
-After deployment, open the Worker URL and visit `/health`, then `/dashboard`. Enter the API key in the dashboard. The key is kept in the current browser session only. Private endpoints reject requests without the key.
+Build the Virtual Office assets before deployment using npm install --prefix virtual-office and npm run build --prefix virtual-office.
+
+After deployment, open the Worker URL and visit /health, /dashboard, then /office/ for the interactive 3D agent office. Enter the API key in the dashboard. The key is kept in the current browser session only. Private endpoints reject requests without the key.
 
 If Cloudflare asks for payment information or proposes a paid upgrade, stop. Do not enter payment details or enable paid resources.
 
@@ -192,3 +194,32 @@ AURA adds a public DuckDuckGo HTML search adapter for owner-initiated market res
 
 
 The dashboard includes a Research tab for the same workflow: create run → search → inspect and verify source → link source to opportunity → score → compare → record CEO recommendation. All decisions remain advisory and require owner approval.
+
+
+## 3D Virtual AI Office (v1.0.0)
+
+The /office/ application is a React + Three.js + React Three Fiber isometric office. Each of the 15 registered AURA agents has a persistent visual identity, role, specialty zone and a character that moves between its home workspace, working desk and owner-review area.
+
+The side panel shows the live agent roster, active tasks and audit activity. The browser polls the authenticated GET /office/state endpoint every five seconds. Agent status is derived from D1:
+- **Working** only when an in_progress task has a valid, unexpired worker lease.
+- **Waiting for input** when the agent has a blocked task.
+- **Idle** when there is no active leased task or a task is only queued.
+- Expired or missing leases are surfaced as stale; they are not shown as productive work.
+
+The office is a visual operations console, not a simulation of hidden intelligence. It uses the same session API key as /dashboard; the key is kept in sessionStorage, never in the frontend bundle. It does not create background workers or enable model inference.
+
+### Build and preview
+
+Install and start the frontend with:
+- npm install --prefix virtual-office
+- npm run dev --prefix virtual-office
+
+The Vite app proxies /office/state to http://127.0.0.1:8787 during local development. Start uv run pywrangler dev in a second terminal, and provide the same AURA API key in the dashboard/office login screen.
+
+Create the production bundle before deployment:
+- npm run build --prefix virtual-office
+- uv run pywrangler deploy
+
+Wrangler serves the generated virtual-office/dist bundle under /office. Requests to /office/state miss the static asset manifest and fall through to the authenticated Python Worker API. The D1 schema must already be applied, and the Worker must have AURA_API_KEY configured.
+
+The UI can show real task state only after D1 and the Worker are deployed. When no valid lease exists, it deliberately does not animate an agent as working.
