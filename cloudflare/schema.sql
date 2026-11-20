@@ -211,3 +211,18 @@ CREATE TABLE IF NOT EXISTS ceo_decisions (
 );
 CREATE INDEX IF NOT EXISTS idx_ceo_decisions_created ON ceo_decisions(created_at);
 
+
+
+CREATE TABLE IF NOT EXISTS research_search_logs (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    query TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('completed','failed')),
+    result_count INTEGER NOT NULL DEFAULT 0 CHECK(result_count >= 0),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES research_runs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_research_search_logs_created ON research_search_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_research_search_logs_run ON research_search_logs(run_id);
+
