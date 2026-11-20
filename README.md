@@ -160,10 +160,10 @@ AURA includes four local skill packs curated from relevant capabilities in [Volt
 - Finance, investment research and risk
 - Platform engineering, orchestration and security
 
-See `skills/README.md`, `skills/registry.yaml`, and `docs/skill-adoption-plan.md` for the mapping, provenance, attribution and activation boundaries. These are AURA-authored playbooks and references, not a bulk import of all upstream skills. The current runtime does not dynamically load or execute them yet.
-\n\n## Skill Loader & Router\n\nThe Worker now exposes authenticated skill catalogue and agent-binding endpoints, and records deterministic skill-pack routing for queued tasks. See [`docs/skill-runtime-routing.md`](docs/skill-runtime-routing.md). This is routing metadata only; model invocation, dynamic instruction loading and background execution are not yet enabled.\n
+See `skills/README.md`, `skills/registry.yaml`, and `docs/skill-adoption-plan.md` for the mapping, provenance, attribution and activation boundaries. These are AURA-authored playbooks and references, not a bulk import of all upstream skills. The Worker bundles the skill instructions for task context preparation; model invocation remains disabled.
+\n\n## Skill Loader & Router\n\nThe Worker exposes authenticated skill catalogue and agent-binding endpoints, records deterministic skill-pack routing, and prepares task-scoped contexts. See [`docs/skill-runtime-routing.md`](docs/skill-runtime-routing.md).\n
 
-## Skill context loader and model adapter (v0.6.0)
+## Skill context loader and model adapter (v0.7.0)
 
 - `POST /agent-tasks/{id}/prepare` loads assigned skill instructions into a guarded context and returns an OpenAI-compatible request preview.
 - `GET /runtime/provider` reports provider readiness.
