@@ -54,12 +54,15 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("def assemble_agent_context", self.source)
         self.assertIn("untrusted_task_input", self.source)
 
-    def test_provider_adapter_is_prepare_only_and_disabled(self):
+    def test_provider_adapter_is_integrated_but_fail_closed_by_default(self):
         self.assertIn("def build_openai_compatible_payload", self.source)
         self.assertIn("def provider_adapter_status", self.source)
-        self.assertIn('"transport_enabled": False', self.source)
-        self.assertIn("No provider credentials or per-task owner-approved model budget", self.source)
-        self.assertNotIn("httpx.post(", self.source)
+        self.assertIn("async def invoke_cloudflare_model", self.source)
+        self.assertIn("async def invoke_groq_model", self.source)
+        self.assertIn("AURA_MODEL_ENABLED", self.source)
+        self.assertIn("AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED", self.source)
+        self.assertIn("AURA_GROQ_FREE_TIER_CONFIRMED", self.source)
+        self.assertIn("automatic_fallback", self.source)
         self.assertNotIn("requests.post(", self.source)
 
     def test_task_context_prepare_endpoint_is_guarded(self):
