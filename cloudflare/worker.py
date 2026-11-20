@@ -297,7 +297,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <label>API key</label><input id="key" type="password" autocomplete="off" placeholder="Masukkan AURA_API_KEY">
 <button class="primary" onclick="connect()">Connect</button><p class="hint">Key hanya disimpan di session browser ini, bukan di repository.</p><div id="loginmsg" class="hint"></div></div>
 <div id="app" class="hidden">
-<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><a class="tab" href="/office/">3D Virtual Office ↗</a><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
+<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><a class="tab" href="/office/">3D Virtual Office ↗</a><a class="tab" href="/agents">Agent Console ↗</a><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
 <div class="grid">
 <div class="metric"><span class="muted">Confirmed income</span><strong id="income">Rp0</strong></div>
 <div class="metric"><span class="muted">Recorded expenses</span><strong id="expense">Rp0</strong></div>
@@ -382,6 +382,38 @@ document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{doc
 if(apiKey){document.getElementById("key").value=apiKey;connect()}
 </script></body></html>
 """
+
+
+AGENT_CONSOLE = r"""<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURA — Agent Console</title><style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141c30;--line:#26334d;--muted:#9aa9c3;--text:#edf3ff;--accent:#9b8cff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui}main{max-width:1000px;margin:auto;padding:22px 14px 50px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#0e1729;color:var(--text);margin:5px 0 12px}textarea{min-height:100px}button,a{border:1px solid var(--line);background:#202b45;color:var(--text);padding:9px 12px;border-radius:8px;cursor:pointer;text-decoration:none}button.primary{background:var(--accent);color:#11152a;font-weight:700}.muted,.hint{color:var(--muted)}.hint{font-size:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:9px;border-bottom:1px solid var(--line);vertical-align:top}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0e1729;padding:12px;border-radius:8px}@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<h1>AURA Agent Console</h1><p class="muted">Queue management · guarded mode · no autonomous model calls</p>
+<p><a href="/dashboard">← Dashboard</a> <a href="/office/">Virtual Office</a></p>
+<section class="panel" id="login"><h2>Connect</h2><label>API key</label><input id="key" type="password" autocomplete="off" placeholder="AURA_API_KEY"><button class="primary" id="connect">Connect</button><p class="hint">Key hanya disimpan di session browser.</p><div id="msg"></div></section>
+<div id="app" hidden>
+<section class="panel"><h2>Create agent task</h2><form id="taskform"><div class="grid"><div><label>Agent</label><select name="agent" id="agent"></select></div><div><label>Priority</label><select name="priority"><option>low</option><option selected>normal</option><option>high</option><option>urgent</option></select></div></div><label>Objective</label><textarea name="objective" minlength="5" maxlength="2000" required placeholder="Jelaskan output yang harus disiapkan agent."></textarea><label>Related opportunity ID (optional)</label><input name="related_opportunity_id"><button class="primary">Add to queue</button></form></section>
+<section class="panel"><div class="grid"><h2>Task queue</h2><div style="text-align:right"><button id="refresh">Refresh</button></div></div><div class="scroll" id="tasks"></div></section>
+<section class="panel"><h2>Task preparation preview</h2><p class="hint">Menyiapkan konteks dan skill saja. Tidak memanggil model, internet, atau menjalankan aksi.</p><div id="preview" class="muted">Pilih Prepare pada task.</div></section>
+</div></main><script>
+const agents=["CEO Orchestrator","Market Intelligence","Service Sales","Clipping Studio","Affiliate Commerce","Content & Media","E-commerce / Dropship","Digital Products","SEO / Website","Equity Research","Crypto Research","Trading Risk Manager","Finance & Treasury","Compliance & Rights","QA / Auditor"];
+let key=sessionStorage.getItem("aura_agent_key")||"";
+const el=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{"X-AURA-API-Key":key,"Content-Type":"application/json",...(opts.headers||{})}});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}if(!r.ok)throw Error(d.detail||r.statusText);return d}
+function say(t){el("msg").textContent=t}
+async function load(){try{const rows=await api("/agent-tasks");el("tasks").innerHTML='<table><thead><tr><th>Agent</th><th>Objective</th><th>Priority</th><th>Status</th><th>Skill packs</th><th>Action</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.agent)+'</td><td>'+esc(x.objective)+'</td><td>'+esc(x.priority)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.skill_pack_ids||"—")+'</td><td>'+(["queued","in_progress","blocked"].includes(x.status)?'<button data-prepare="'+esc(x.id)+'">Prepare</button>':"—")+'</td></tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-prepare]").forEach(b=>b.onclick=()=>prepare(b.dataset.prepare));}catch(e){say(e.message)}}
+async function prepare(id){try{const d=await api("/agent-tasks/"+id+"/prepare",{method:"POST",body:"{}"});el("preview").innerHTML='<pre>'+esc(JSON.stringify(d,null,2))+'</pre>'}catch(e){say(e.message)}}
+el("connect").onclick=async()=>{key=el("key").value.trim();try{await api("/agent-tasks");sessionStorage.setItem("aura_agent_key",key);el("login").hidden=true;el("app").hidden=false;load()}catch(e){say(e.message)}};
+el("key").value=key;el("refresh").onclick=load;
+el("taskform").onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{const r=await api("/agent-tasks",{method:"POST",body:JSON.stringify(d)});say("Task queued: "+r.id);e.target.reset();load()}catch(x){say(x.message)}};
+el("agent").innerHTML=agents.map(a=>'<option>'+esc(a)+'</option>').join("");
+if(key)el("connect").click();
+</script></body></html>"""
+@app.get("/agents", response_class=HTMLResponse, include_in_schema=False)
+async def agent_console():
+    return HTMLResponse(AGENT_CONSOLE)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
