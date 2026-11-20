@@ -170,3 +170,10 @@ See `skills/README.md`, `skills/registry.yaml`, and `docs/skill-adoption-plan.md
 - The adapter is prepare-only: no provider credentials, model, per-task approved budget or network transport is configured. It cannot call a paid model.
 - Task objective is passed as untrusted user input, separate from AURA's system guardrails.
 - The D1 routing migration is still required in Cloudflare before deployed task routes work.
+
+
+## Bounded Agent Execution Engine (v0.7.0)
+
+AURA now supports lease-based task claiming, heartbeats, safe local tool calls, result/evidence recording and task release. The initial tool registry contains pure local `text_stats` and `unit_economics` functions only. No model provider or external side-effect tool is enabled. Completed tasks remain pending QA review.
+
+See `docs/skill-runtime-routing.md` for API behavior and the execution boundary. Apply the complete `cloudflare/schema.sql` to D1 before deployment. CI tests are configured; their latest result has not yet been verified.
