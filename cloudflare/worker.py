@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from workers import asgi
 
-VERSION = "0.7.0"
+VERSION = "0.9.1"
 app = FastAPI(
     title="AURA — Autonomous Unified Revenue Agent",
     version=VERSION,
