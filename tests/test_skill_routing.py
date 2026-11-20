@@ -107,6 +107,8 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("10 queries per 10 minutes", self.source)
         self.assertIn("async def search_research_web", self.source)
         self.assertIn("class DuckDuckGoHTMLParser", self.source)
+        self.assertIn("async function loadResearchSources", self.source)
+        self.assertIn("async function linkResearchSource", self.source)
         self.assertIn('"verification_status": "unverified"', self.source)
 
     def test_research_search_logs_schema_exists(self):
@@ -125,6 +127,7 @@ class SkillRoutingTests(unittest.TestCase):
             '@app.post("/research/sources"',
             '@app.get("/research/sources"',
             '@app.post("/research/sources/{source_id}/verify"',
+            '@app.post("/research/sources/{source_id}/link"',
             '@app.post("/opportunities/{opportunity_id}/score"',
             '@app.get("/opportunities/scores"',
             '@app.post("/research/compare"',
