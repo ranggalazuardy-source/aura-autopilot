@@ -207,5 +207,18 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertTrue(config["workers_dev"])
 
 
+    def test_cloudflare_deploy_workflow_is_secret_gated_and_manual(self):
+        workflow = (ROOT / ".github" / "workflows" / "deploy-cloudflare.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("secrets.CLOUDFLARE_API_TOKEN", workflow)
+        self.assertIn("secrets.CLOUDFLARE_ACCOUNT_ID", workflow)
+        self.assertIn("secrets.AURA_API_KEY", workflow)
+        self.assertIn("pywrangler d1 create aura-autopilot-db", workflow)
+        self.assertIn("pywrangler d1 execute aura-autopilot-db --remote --file=cloudflare/schema.sql", workflow)
+        self.assertIn("pywrangler secret put AURA_API_KEY", workflow)
+        self.assertIn("pywrangler deploy", workflow)
+        self.assertIn("/office/state", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
