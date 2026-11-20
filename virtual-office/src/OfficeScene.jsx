@@ -114,7 +114,7 @@ function AgentCharacter({ agent, homePosition, workPosition, waitingPosition, se
   </group>;
 }
 
-function SceneContents({ agents, selectedAgent, onSelectAgent }) {
+function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
   const positionedAgents = useMemo(() => {
     const counts = {}, waitingCounts = {};
     return agents.map((agent) => {
@@ -131,8 +131,8 @@ function SceneContents({ agents, selectedAgent, onSelectAgent }) {
     });
   }, [agents]);
   return <>
-    <color attach="background" args={["#0b1020"]} />
-    <fog attach="fog" args={["#0b1020", 22, 42]} />
+    <color attach="background" args={["#f4f6fb"]} />
+    <fog attach="fog" args={["#f4f6fb", 28, 48]} />
     <ambientLight intensity={1.35} />
     <hemisphereLight args={["#dbeafe", "#263247", 1.15]} />
     <directionalLight position={[8, 18, 10]} intensity={2.4} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
@@ -145,12 +145,29 @@ function SceneContents({ agents, selectedAgent, onSelectAgent }) {
     <mesh position={[0, 0.53, -0.04]}><boxGeometry args={[0.67, 0.04, 0.06]} /><meshStandardMaterial color="#f3d48a" emissive="#f3d48a" emissiveIntensity={0.22} /></mesh>
     {positionedAgents.map((agent) => <AgentCharacter key={agent.name} agent={agent} homePosition={agent.home} workPosition={agent.work} waitingPosition={agent.waiting} selected={selectedAgent === agent.name} onSelect={onSelectAgent} />)}
     <ContactShadows position={[0, -0.025, 0]} opacity={0.28} scale={27} blur={2.2} far={9} />
-    <OrbitControls makeDefault target={[0, 0.7, 0]} minDistance={17} maxDistance={34} minPolarAngle={0.55} maxPolarAngle={1.38} enableDamping dampingFactor={0.08} />
+    <OrbitControls ref={controlsRef} makeDefault target={[0, 0.7, 0]} minDistance={13} maxDistance={42} minPolarAngle={0.55} maxPolarAngle={1.38} enableDamping dampingFactor={0.08} enableZoom zoomSpeed={0.8} enablePan autoRotate autoRotateSpeed={0.22} />
   </>;
 }
 
 export default function OfficeScene({ agents = [], selectedAgent, onSelectAgent }) {
-  return <Canvas shadows dpr={[1, 1.6]} camera={{ position: [21, 25, 22], zoom: 43, near: 0.1, far: 100, up: [0, 1, 0] }} gl={{ antialias: true, alpha: false }}>
-    <SceneContents agents={agents} selectedAgent={selectedAgent} onSelectAgent={onSelectAgent} />
-  </Canvas>;
+  const controlsRef = useRef(null);
+  const zoom = (direction) => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    if (direction > 0) controls.dollyIn(1.22);
+    else controls.dollyOut(1.22);
+    controls.update();
+  };
+  const resetView = () => controlsRef.current?.reset();
+  return <div className="scene-canvas-wrap">
+    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [21, 25, 22], zoom: 43, near: 0.1, far: 100, up: [0, 1, 0] }} gl={{ antialias: true, alpha: false }}>
+      <SceneContents agents={agents} selectedAgent={selectedAgent} onSelectAgent={onSelectAgent} controlsRef={controlsRef} />
+    </Canvas>
+    <div className="scene-controls" aria-label="Floor plan controls">
+      <button type="button" onClick={() => zoom(1)} aria-label="Zoom in" title="Zoom in">+</button>
+      <button type="button" onClick={() => zoom(-1)} aria-label="Zoom out" title="Zoom out">−</button>
+      <button type="button" onClick={resetView} aria-label="Reset view" title="Reset view">↺</button>
+    </div>
+    <div className="scene-gesture-hint">Drag to rotate · Pinch or scroll to zoom</div>
+  </div>;
 }
