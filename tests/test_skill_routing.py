@@ -24,7 +24,7 @@ class SkillRoutingTests(unittest.TestCase):
     def test_all_agent_bindings_reference_known_skill_packs(self):
         packs = self.assignments["SKILL_PACKS"]
         bindings = self.assignments["AGENT_SKILLS"]
-        self.assertEqual(len(bindings), 15)
+        self.assertEqual(len(bindings), 20)
         for agent, pack_ids in bindings.items():
             with self.subTest(agent=agent):
                 self.assertTrue(pack_ids)
@@ -33,8 +33,8 @@ class SkillRoutingTests(unittest.TestCase):
     def test_veto_agents_receive_all_skill_packs(self):
         all_packs = set(self.assignments["SKILL_PACKS"])
         bindings = self.assignments["AGENT_SKILLS"]
-        self.assertEqual(set(bindings["Compliance & Rights"]), all_packs)
-        self.assertEqual(set(bindings["QA / Auditor"]), all_packs)
+        self.assertEqual(set(bindings["Legal Compliance Checker"]), all_packs)
+        self.assertEqual(set(bindings["Model QA Specialist"]), all_packs)
 
     def test_task_routing_is_persisted_and_audited(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS task_skill_routes", self.schema)
