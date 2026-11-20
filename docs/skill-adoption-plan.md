@@ -37,4 +37,4 @@ The upstream repository's LICENSE file states MIT License and requires retention
 
 ## Important runtime limitation
 
-This is a curated skill library in source control. AURA v0.5.0 does not yet dynamically load or execute these packs, and adding a skill does not connect its provider, install an MCP server, provision an API key, or authorize an action. A subsequent runtime implementation must add skill discovery, version/provenance tracking, task-to-skill routing, sandboxed execution, observability, and policy checks before any agent can claim it used a skill.
+This is a curated skill library in source control. The Worker bundles the corresponding AURA-authored instruction bodies and routes each task to its assigned pack; it prepares context but does not invoke a model. Adding a skill does not connect its provider, install an MCP server, provision an API key, or authorize an action. Future work still needs version/provenance drift checks, a supervised model runtime, independent QA review, observability and staging integration tests before any agent can claim completed AI work.
