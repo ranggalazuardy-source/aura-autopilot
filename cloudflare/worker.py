@@ -117,7 +117,7 @@ class ToolRunIn(BaseModel):
 
 
 class AgentTaskStatusIn(BaseModel):
-    status: str = Field(pattern="^(queued|in_progress|blocked|completed|cancelled)$")
+    status: str = Field(pattern="^(queued|blocked|cancelled)$")
     result_summary: str = Field(default="", max_length=3000)
 
 
