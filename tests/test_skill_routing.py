@@ -219,6 +219,32 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("pywrangler deploy", workflow)
         self.assertIn("/office/state", workflow)
 
+    def test_task_claim_recovers_orphaned_and_expired_leases(self):
+        self.assertIn("NOT EXISTS", self.source)
+        self.assertIn("l.task_id = agent_tasks.id AND l.expires_at > ?", self.source)
+
+    def test_worker_mutations_are_lease_bound_and_terminal_states_guarded(self):
+        self.assertIn("AND worker_id = ? AND lease_token = ? AND expires_at > ?", self.source)
+        self.assertIn("completed or cancelled tasks are terminal", self.source)
+        self.assertIn("task state changed; refresh before retrying", self.source)
+
+    def test_agent_and_related_opportunity_are_validated_before_queue_insert(self):
+        self.assertIn("pack_ids = resolve_agent_skills(payload.agent)", self.source)
+        self.assertIn("related opportunity not found", self.source)
+        self.assertIn("resolve_agent_skills(payload.agent)", self.source)
+
+    def test_financial_and_tool_inputs_reject_non_finite_values(self):
+        self.assertIn("allow_inf_nan=False", self.source)
+        self.assertIn("math.isfinite(float(value))", self.source)
+
+    def test_office_completion_metric_uses_jakarta_calendar_day(self):
+        self.assertIn('ZoneInfo("Asia/Jakarta")', self.source)
+        self.assertIn("updated.astimezone(jakarta_tz).date()", self.source)
+
+    def test_research_source_url_rejects_malformed_ports(self):
+        self.assertIn("parsed.port", self.source)
+        self.assertIn('raise HTTPException(422, "source URL is malformed")', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
