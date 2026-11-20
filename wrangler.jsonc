@@ -7,6 +7,12 @@
     "python_workers"
   ],
   "workers_dev": true,
+  "vars": {
+    "AURA_SCHEDULER_ENABLED": "false"
+  },
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
   "assets": {
     "directory": "./virtual-office/dist",
     "base_path": "/office",
