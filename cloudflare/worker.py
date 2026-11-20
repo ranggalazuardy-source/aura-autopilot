@@ -290,8 +290,13 @@ if(apiKey){document.getElementById("key").value=apiKey;connect()}
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root():
-    # Keep the landing route simple and independent of runtime HTML interpolation.
-    return HTMLResponse(content=DASHBOARD)
+    # Lightweight landing page keeps both applications discoverable on the same origin.
+    return HTMLResponse(content="""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURA — Autonomous Unified Revenue Agent</title>
+<style>body{font:16px system-ui;background:#10131c;color:#f4f2ed;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:720px;padding:40px}a{display:inline-block;margin:10px 12px 0 0;padding:14px 20px;border:1px solid #777;border-radius:12px;color:#fff;text-decoration:none}p{color:#b8bdc9}</style></head>
+<body><main><h1>AURA</h1><p>Autonomous Unified Revenue Agent · guarded multi-agent operations</p>
+<a href="/dashboard">Operations Dashboard</a><a href="/office/">Virtual AI Office</a></main></body></html>""")
 
 @app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard():
