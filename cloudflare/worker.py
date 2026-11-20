@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
-from workers import WorkerEntrypoint, asgi
+from workers import asgi
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -1704,7 +1704,6 @@ async def audit_entries(db=Depends(get_db)):
     return result.results.to_py()
 
 
-class Default(WorkerEntrypoint):
-    async def fetch(self, request):
-        # Pass the runtime env explicitly so FastAPI's ASGI scope receives D1 and secrets.
-        return await asgi.fetch(app, request, self.env)
+# Use Cloudflare's official ASGI entrypoint. The adapter injects Worker bindings
+# into request.scope["env"], which get_env() reads for D1 and secrets.
+Default = asgi.entrypoint(app)
