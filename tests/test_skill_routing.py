@@ -221,7 +221,9 @@ class SkillRoutingTests(unittest.TestCase):
 
     def test_task_claim_recovers_orphaned_and_expired_leases(self):
         self.assertIn("NOT EXISTS", self.source)
-        self.assertIn("l.task_id = agent_tasks.id AND l.expires_at > ?", self.source)
+        self.assertIn("orphan_cutoff", self.source)
+        self.assertIn("updated_at <= ?", self.source)
+        self.assertIn("expired.expires_at <= ?", self.source)
 
     def test_worker_mutations_are_lease_bound_and_terminal_states_guarded(self):
         self.assertIn("AND worker_id = ? AND lease_token = ? AND expires_at > ?", self.source)
@@ -256,6 +258,17 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("sanitize_validation_data", self.source)
         self.assertIn("RequestValidationError", self.source)
         self.assertIn("status_code=422", self.source)
+
+    def test_approval_decision_is_single_winner_atomic_update(self):
+        self.assertIn("UPDATE approvals SET status = ? WHERE id = ? AND status = 'pending' RETURNING id", self.source)
+
+    def test_content_approval_requires_reviewed_rights_and_valid_transition(self):
+        self.assertIn("allowed_transitions", self.source)
+        self.assertIn("(? != 'approved' OR rights_status = 'cleared')", self.source)
+        self.assertIn("WHERE id = ? AND rights_status = ? RETURNING id", self.source)
+
+    def test_research_source_verification_is_one_time_atomic_update(self):
+        self.assertIn("WHERE id = ? AND verification_status = 'unverified' RETURNING id", self.source)
 
 
 if __name__ == "__main__":
