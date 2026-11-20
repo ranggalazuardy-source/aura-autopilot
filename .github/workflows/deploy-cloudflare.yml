@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
           mkdir -p .deploy-tools
           printf '{"private":true}\n' > .deploy-tools/package.json
-          npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.148.0
+          npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.165.0
           WRANGLER_BIN="$GITHUB_WORKSPACE/.deploy-tools/node_modules/.bin"
           echo "$WRANGLER_BIN" >> "$GITHUB_PATH"
           export PATH="$WRANGLER_BIN:$PATH"
@@ -69,15 +69,40 @@ jobs:
       - name: Install Python Worker dependencies
         run: uv sync --all-groups
 
-      - name: Build Virtual Office frontend
+      - name: Install and audit Virtual Office dependencies
         run: |
           npm install --prefix virtual-office --no-audit --no-fund
-          npm run build --prefix virtual-office
+          npm audit --prefix virtual-office --audit-level=high
+      - name: Build Virtual Office frontend
+        run: npm run build --prefix virtual-office
+      - name: Audit Python dependencies
+        run: uv run pip-audit --strict
 
       - name: Compile and test AURA
         run: |
-          python -m compileall -q app cloudflare
+          uv run python -m compileall -q app cloudflare
           uv run python -m unittest discover -s tests -v
+      - name: Validate embedded dashboard JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          import re
+          from pathlib import Path
+
+          source = Path("cloudflare/worker.py").read_text(encoding="utf-8")
+          module = ast.parse(source)
+          dashboard = next(
+              ast.literal_eval(node.value)
+              for node in module.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "DASHBOARD" for target in node.targets)
+          )
+          scripts = re.findall(r"<script>(.*?)</script>", dashboard, flags=re.DOTALL)
+          assert len(scripts) == 1, f"Expected one dashboard script, found {len(scripts)}"
+          Path("/tmp/aura-dashboard.js").write_text(scripts[0], encoding="utf-8")
+          PY
+          node --check /tmp/aura-dashboard.js
       - name: Validate Worker bundle before changing Cloudflare resources
         run: uv run pywrangler deploy --dry-run
 
