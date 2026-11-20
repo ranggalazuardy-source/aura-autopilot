@@ -17,7 +17,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from workers import WorkerEntrypoint, asgi
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
 app = FastAPI(
     title="AURA — Autonomous Unified Revenue Agent",
@@ -71,12 +71,28 @@ def get_db(request: Request):
     return env.DB
 
 
+async def enforce_auth_failure_rate_limit(request: Request):
+    env = get_env(request)
+    limiter = getattr(env, "AURA_AUTH_RATE_LIMITER", None) if env else None
+    if limiter is None:
+        # Fail closed: production must have the configured Cloudflare Rate Limiting binding.
+        raise HTTPException(503, "Authentication rate limiter is not configured")
+    client_ip = request.headers.get("CF-Connecting-IP", "unknown")
+    try:
+        decision = await limiter.limit({"key": str(client_ip)})
+    except Exception:
+        raise HTTPException(503, "Authentication rate limiter is unavailable")
+    if not getattr(decision, "success", False):
+        raise HTTPException(429, "Too many invalid API-key attempts; retry later")
+
+
 async def require_api_key(request: Request, supplied: str | None = Depends(API_KEY_HEADER)):
     env = get_env(request)
     expected = getattr(env, "AURA_API_KEY", None) if env else None
     if not expected:
         raise HTTPException(503, "AURA_API_KEY secret has not been configured")
     if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        await enforce_auth_failure_rate_limit(request)
         raise HTTPException(401, "Invalid API key")
 
 
