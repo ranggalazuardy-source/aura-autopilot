@@ -31,6 +31,13 @@ jobs:
           npm audit --prefix virtual-office --audit-level=high
       - name: Build React Three Fiber virtual office
         run: npm run build --prefix virtual-office
+      - name: Install and audit the exact Wrangler CLI used for production deploy
+        run: |
+          mkdir -p .deploy-tools
+          printf '{"private":true}\\n' > .deploy-tools/package.json
+          npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.165.0
+          npm audit --prefix .deploy-tools --audit-level=high
+          .deploy-tools/node_modules/.bin/wrangler --version
       - name: Audit Python dependencies
         run: uv run pip-audit --strict
       - name: Compile Python sources
