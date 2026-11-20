@@ -69,8 +69,8 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
 
 
     def test_model_provider_integration_is_disabled_and_fail_closed(self):
-        self.assertIn('AURA_MODEL_ENABLED: "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
-        self.assertIn('AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED: "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"AURA_MODEL_ENABLED": "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED": "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertIn('"binding": "AI"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertIn('CLOUDFLARE_FREE_MODEL = "@cf/zai-org/glm-4.7-flash"', SOURCE)
         self.assertIn('GROQ_FREE_MODEL = "openai/gpt-oss-120b"', SOURCE)
