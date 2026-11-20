@@ -226,3 +226,11 @@ CREATE TABLE IF NOT EXISTS research_search_logs (
 CREATE INDEX IF NOT EXISTS idx_research_search_logs_created ON research_search_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_research_search_logs_run ON research_search_logs(run_id);
 
+
+
+-- Per-UTC-day model call cap. This is not a substitute for provider neuron/token quotas.
+CREATE TABLE IF NOT EXISTS model_usage_daily (
+    day_utc TEXT PRIMARY KEY,
+    call_count INTEGER NOT NULL DEFAULT 0 CHECK(call_count >= 0),
+    updated_at TEXT NOT NULL
+);
