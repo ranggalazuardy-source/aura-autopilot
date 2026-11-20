@@ -81,6 +81,14 @@ class LocalApiSecurityTests(unittest.TestCase):
         event_types = {entry["event_type"] for entry in audit.json()}
         self.assertTrue({"opportunity.created", "approval.requested", "approval.approved", "ledger.income"}.issubset(event_types))
 
+    def test_openapi_documents_api_key_header_authentication(self):
+        schema = client.get("/openapi.json").json()
+        schemes = schema["components"]["securitySchemes"]
+        key_scheme = next(item for item in schemes.values() if item.get("type") == "apiKey")
+        self.assertEqual(key_scheme["in"], "header")
+        self.assertEqual(key_scheme["name"], "X-AURA-API-Key")
+        self.assertTrue(schema["paths"]["/opportunities"]["get"]["security"])
+
     def test_non_finite_financial_values_are_rejected(self):
         response = client.post(
             "/ledger",
