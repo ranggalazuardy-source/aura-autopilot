@@ -22,9 +22,32 @@ jobs:
           node-version: "22"
       - name: Build React Three Fiber virtual office
         run: npm install --prefix virtual-office --no-audit --no-fund && npm run build --prefix virtual-office
+      - name: Install local API test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-local.txt
       - name: Compile Python sources
         run: python -m compileall -q app cloudflare
-      - name: Run skill routing tests
+      - name: Validate embedded dashboard JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          import re
+          from pathlib import Path
+
+          source = Path("cloudflare/worker.py").read_text(encoding="utf-8")
+          module = ast.parse(source)
+          dashboard = next(
+              ast.literal_eval(node.value)
+              for node in module.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "DASHBOARD" for target in node.targets)
+          )
+          scripts = re.findall(r"<script>(.*?)</script>", dashboard, flags=re.DOTALL)
+          assert len(scripts) == 1, f"Expected one dashboard script, found {len(scripts)}"
+          Path("/tmp/aura-dashboard.js").write_text(scripts[0], encoding="utf-8")
+          PY
+          node --check /tmp/aura-dashboard.js
+      - name: Run automated behavior and architecture tests
         run: python -m unittest discover -s tests -v
       - name: Validate D1 schema with SQLite
         run: |
