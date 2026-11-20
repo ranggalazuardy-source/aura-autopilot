@@ -159,5 +159,41 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('"agent_execution": "not_automated"', self.source)
 
 
+    def test_office_profiles_cover_all_registered_agents(self):
+        profiles = {}
+        tree = ast.parse(self.source)
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "AGENT_OFFICE_PROFILES":
+                        profiles = ast.literal_eval(node.value)
+        self.assertEqual(set(profiles), set(self.assignments["AGENT_SKILLS"]))
+        self.assertEqual(len(profiles), 15)
+        self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "studio", "finance", "trust"})
+
+    def test_virtual_office_state_uses_live_tasks_leases_and_audit_logs(self):
+        self.assertIn('@app.get("/office/state", dependencies=[Depends(require_api_key)])', self.source)
+        self.assertIn("LEFT JOIN task_execution_leases l ON l.task_id = t.id", self.source)
+        self.assertIn("l.expires_at AS lease_expires_at", self.source)
+        self.assertIn('state = "waiting_input"', self.source)
+        self.assertIn('state = "working"', self.source)
+        self.assertIn('FROM audit_log ORDER BY created_at DESC LIMIT 60', self.source)
+        self.assertIn('"background_scheduler_enabled": False', self.source)
+        self.assertIn('"model_provider_enabled": False', self.source)
+
+    def test_virtual_office_frontend_uses_react_three_fiber_and_live_api(self):
+        frontend = (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8")
+        scene = (ROOT / "virtual-office" / "src" / "OfficeScene.jsx").read_text(encoding="utf-8")
+        package = (ROOT / "virtual-office" / "package.json").read_text(encoding="utf-8")
+        self.assertIn("@react-three/fiber", package)
+        self.assertIn("useFrame", scene)
+        self.assertIn("Canvas", scene)
+        self.assertIn("/office/state", frontend)
+        self.assertIn("X-AURA-API-Key", frontend)
+        self.assertIn("setInterval", frontend)
+        self.assertIn("active_tasks", frontend)
+        self.assertIn("logs", frontend)
+
+
 if __name__ == "__main__":
     unittest.main()
