@@ -177,3 +177,10 @@ See `skills/README.md`, `skills/registry.yaml`, and `docs/skill-adoption-plan.md
 AURA now supports lease-based task claiming, heartbeats, safe local tool calls, result/evidence recording and task release. The initial tool registry contains pure local `text_stats` and `unit_economics` functions only. No model provider or external side-effect tool is enabled. Completed tasks remain pending QA review.
 
 See `docs/skill-runtime-routing.md` for API behavior and the execution boundary. Apply the complete `cloudflare/schema.sql` to D1 before deployment. CI tests are configured; their latest result has not yet been verified.
+
+
+## Research Intelligence Engine (v0.8.0)
+
+AURA now includes authenticated research-run tracking, source provenance intake, manual source verification, transparent opportunity scoring, market comparison snapshots, and CEO decision recommendations. The scoring model weights demand, competition, unit economics, zero-capital fit, speed to revenue, skill fit, evidence quality and risk control. Recommendations are advisory only; owner approval remains required.
+
+Research source intake accepts HTTPS URLs and owner/worker-supplied excerpts. It does not crawl or fetch websites, and newly submitted sources remain unverified until manually reviewed. No live search provider, model provider, background worker or paid integration is configured.
