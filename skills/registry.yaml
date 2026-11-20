@@ -9,22 +9,22 @@ upstream:
 divisions:
   executive:
     label: Executive
-    agents: [Agents Orchestrator, Business Strategist]
+    agents: ["Agents Orchestrator", "Business Strategist"]
   research-opportunity:
     label: Research & Opportunity
-    agents: [Product Trend Researcher, Growth Hacker]
+    agents: ["Product Trend Researcher", "Growth Hacker"]
   content-audience:
     label: Content & Audience
-    agents: [Content Creator, TikTok Strategist, Instagram Curator, Video Optimization Specialist, SEO Specialist, Reddit Community Builder]
+    agents: ["Content Creator", "TikTok Strategist", "Instagram Curator", "Video Optimization Specialist", "SEO Specialist", "Reddit Community Builder"]
   sales-monetization:
     label: Sales & Monetization
-    agents: [Offer & Lead Gen Strategist, Outbound Strategist, Sales Outreach, Proposal Strategist]
+    agents: ["Offer & Lead Gen Strategist", "Outbound Strategist", "Sales Outreach", "Proposal Strategist"]
   operations-finance:
     label: Operations & Finance
-    agents: [Finance Tracker, Analytics Reporter, Legal Compliance Checker]
+    agents: ["Finance Tracker", "Analytics Reporter", "Legal Compliance Checker"]
   technology-automation:
     label: Technology & Automation
-    agents: [AI Engineer, DevOps Automator, Model QA Specialist]
+    agents: ["AI Engineer", "DevOps Automator", "Model QA Specialist"]
 roles:
   "Agents Orchestrator":
     division: "Executive"
