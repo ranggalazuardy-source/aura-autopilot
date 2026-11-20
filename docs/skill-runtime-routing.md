@@ -26,3 +26,15 @@ The D1 migration in `cloudflare/schema.sql` must be applied to the Cloudflare D1
 3. Add execution leases, retries, idempotency and bounded task budgets.
 4. Keep compliance, QA and owner approval gates outside the executing agent's control.
 5. Add integration tests against a staging D1 database before production deployment.
+
+
+## Skill loader and provider adapter
+
+The Worker now bundles runtime instruction bodies for all four skill packs and assembles a task-scoped context from the agent binding. The instruction bodies are aligned with the human-readable files under `/skills` and packaged in code because a Worker must not assume arbitrary filesystem access at runtime.
+
+- `POST /agent-tasks/{task_id}/prepare` prepares system instructions, task objective and an OpenAI-compatible request preview.
+- `GET /runtime/provider` reports provider readiness without exposing secrets.
+- The provider adapter builds a request envelope only. It makes no outbound network calls and has no configured model, API key or approved per-task budget.
+- Task objectives are kept in a separate user-message field and explicitly treated as untrusted data.
+
+This release does **not** call a model, execute external tools, launch background agents, publish content or initiate financial activity. No paid model use is enabled.
