@@ -1018,11 +1018,14 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
     prompt_size = len(context["system_instructions"]) + len(context["task_objective"])
     if prompt_size > MAX_MODEL_PROMPT_CHARS:
         raise HTTPException(413, "Prepared model prompt exceeds AURA safety limit")
-    previous_output = await db.prepare(
-        "SELECT id FROM task_execution_artifacts WHERE task_id = ? AND artifact_type = 'agent_output' LIMIT 1"
-    ).bind(task_id).first()
-    if previous_output is not None:
-        raise HTTPException(409, "This task already has a model output; create a new task for another run")
+    claim = await db.prepare(
+        """INSERT INTO model_execution_claims (task_id, provider, status, created_at)
+        VALUES (?, ?, 'started', ?)
+        ON CONFLICT(task_id) DO NOTHING
+        RETURNING task_id"""
+    ).bind(task_id, payload.provider, now_iso()).first()
+    if claim is None:
+        raise HTTPException(409, "A model execution was already attempted for this task; create a new task to retry")
     day, call_count = await reserve_model_call(db)
     if payload.provider == "cloudflare":
         output, model = await invoke_cloudflare_model(env, context)
@@ -1041,6 +1044,9 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
         json.dumps({"provider": payload.provider, "model": model, "output": output}),
         now_iso(),
     ).run()
+    await db.prepare(
+        "UPDATE model_execution_claims SET status = 'completed', artifact_id = ? WHERE task_id = ?"
+    ).bind(artifact_id, task_id).run()
     await write_audit(db, "agent_task.model_executed", task_id, payload.provider + ":" + model)
     return {
         "task_id": task_id,
