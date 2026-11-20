@@ -89,3 +89,6 @@ Apply the complete `cloudflare/schema.sql` to D1 before deployment.
 - Search snippets are discovery leads only. They are not facts verified by AURA. Each result is stored as `unverified` and must pass authenticated manual review before contributing to evidence confidence.
 
 The adapter makes an outbound request to DuckDuckGo's public HTML search page. It requires no paid API key, but the provider may block automated requests, change markup or impose terms/rate limits. It does not crawl full result pages or fetch arbitrary URLs. If the Cloudflare Python runtime does not expose its `js.fetch` bridge, the endpoint returns a provider-unavailable error and logs the failure.
+
+
+The dashboard Research tab now supports creating a research run, searching, reviewing collected sources, linking each source to an opportunity, scoring opportunities, comparing 2–10 candidates, viewing the CEO recommendation and recording the advisory decision. A source contributes to an opportunity's confidence only after it is linked and manually verified.
