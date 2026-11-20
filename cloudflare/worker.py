@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+import math
 from uuid import uuid4
 import hmac
 import json
@@ -58,8 +60,8 @@ class OpportunityIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     channel: str = Field(min_length=2, max_length=80)
     rationale: str = Field(min_length=3, max_length=3000)
-    estimated_cost: float = Field(default=0, ge=0)
-    estimated_revenue: float = Field(default=0, ge=0)
+    estimated_cost: float = Field(default=0, ge=0, allow_inf_nan=False)
+    estimated_revenue: float = Field(default=0, ge=0, allow_inf_nan=False)
     risk_level: str = Field(default="medium", pattern="^(low|medium|high)$")
 
 
@@ -70,13 +72,13 @@ class OpportunityStatusIn(BaseModel):
 class ApprovalIn(BaseModel):
     action_type: str = Field(min_length=2, max_length=80)
     description: str = Field(min_length=3, max_length=3000)
-    amount: float = Field(default=0, ge=0)
+    amount: float = Field(default=0, ge=0, allow_inf_nan=False)
 
 
 class LedgerIn(BaseModel):
     entry_type: str = Field(pattern="^(income|expense)$")
     category: str = Field(min_length=2, max_length=80)
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, allow_inf_nan=False)
     note: str = Field(default="", max_length=1000)
 
 class ContentItemIn(BaseModel):
@@ -847,11 +849,15 @@ async def virtual_office_state(db=Depends(get_db)):
         FROM audit_log ORDER BY created_at DESC LIMIT 60"""
     ).all()
     logs = log_result.results.to_py()
-    now_date = datetime.now(timezone.utc).date().isoformat()
-    completed_today = sum(
-        1 for item in all_tasks
-        if item["status"] == "completed" and str(item["updated_at"]).startswith(now_date)
-    )
+    jakarta_tz = ZoneInfo("Asia/Jakarta")
+    today_jakarta = datetime.now(timezone.utc).astimezone(jakarta_tz).date()
+    completed_today = 0
+    for item in all_tasks:
+        if item["status"] != "completed" or not item.get("updated_at"):
+            continue
+        updated = datetime.fromisoformat(str(item["updated_at"]).replace("Z", "+00:00"))
+        if updated.astimezone(jakarta_tz).date() == today_jakarta:
+            completed_today += 1
     return {
         "generated_at": now_iso(),
         "refresh_interval_ms": 5000,
@@ -917,8 +923,14 @@ def execute_registered_tool(tool_id: str, arguments: dict):
         values = {}
         for key in required:
             value = arguments[key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
-                raise HTTPException(422, key + " must be a non-negative number")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or value < 0
+                or value > 1_000_000_000_000
+            ):
+                raise HTTPException(422, key + " must be a finite non-negative number up to 1e12")
             values[key] = float(value)
         revenue = values["units"] * values["price_per_unit"]
         variable_cost = values["units"] * values["variable_cost_per_unit"]
@@ -954,11 +966,12 @@ async def list_registered_tools():
 @app.post("/agent-tasks/claim-next", dependencies=[Depends(require_api_key)])
 async def claim_next_agent_task(payload: AgentTaskClaimIn, db=Depends(get_db)):
     now = int(datetime.now(timezone.utc).timestamp())
-    # Expired leases are reclaimed by resetting only tasks still marked in_progress.
+    # Recover both expired leases and tasks orphaned before their lease row was written.
     await db.prepare(
         """UPDATE agent_tasks SET status = 'queued', updated_at = ?
-        WHERE status = 'in_progress' AND id IN
-        (SELECT task_id FROM task_execution_leases WHERE expires_at <= ?)"""
+        WHERE status = 'in_progress' AND NOT EXISTS
+        (SELECT 1 FROM task_execution_leases l
+         WHERE l.task_id = agent_tasks.id AND l.expires_at > ?)"""
     ).bind(now_iso(), now).run()
     await db.prepare("DELETE FROM task_execution_leases WHERE expires_at <= ?").bind(now).run()
     task = await db.prepare(
@@ -993,10 +1006,16 @@ async def claim_next_agent_task(payload: AgentTaskClaimIn, db=Depends(get_db)):
 @app.post("/agent-tasks/{task_id}/heartbeat", dependencies=[Depends(require_api_key)])
 async def heartbeat_agent_task(task_id: str, payload: AgentTaskHeartbeatIn, db=Depends(get_db)):
     await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
-    expires = int(datetime.now(timezone.utc).timestamp()) + payload.lease_seconds
-    await db.prepare(
-        "UPDATE task_execution_leases SET expires_at = ?, updated_at = ? WHERE task_id = ?"
-    ).bind(expires, now_iso(), task_id).run()
+    now = int(datetime.now(timezone.utc).timestamp())
+    expires = now + payload.lease_seconds
+    renewed = await db.prepare(
+        """UPDATE task_execution_leases SET expires_at = ?, updated_at = ?
+        WHERE task_id = ? AND worker_id = ? AND lease_token = ? AND expires_at > ?
+        AND EXISTS (SELECT 1 FROM agent_tasks WHERE id = ? AND status = 'in_progress')
+        RETURNING task_id"""
+    ).bind(expires, now_iso(), task_id, payload.worker_id, payload.lease_token, now, task_id).first()
+    if renewed is None:
+        raise HTTPException(409, "task lease expired or task is no longer in progress")
     await write_audit(db, "agent_task.heartbeat", task_id, payload.worker_id)
     return {"task_id": task_id, "lease_expires_at": expires}
 
@@ -1023,22 +1042,29 @@ async def run_agent_tool(task_id: str, payload: ToolRunIn, db=Depends(get_db)):
 @app.post("/agent-tasks/{task_id}/complete", dependencies=[Depends(require_api_key)])
 async def complete_agent_task(task_id: str, payload: AgentTaskCompleteIn, db=Depends(get_db)):
     await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
-    task = await db.prepare("SELECT status FROM agent_tasks WHERE id = ?").bind(task_id).first()
-    if task is None or task.status != "in_progress":
-        raise HTTPException(409, "task must be in progress")
     for evidence in payload.evidence:
         if not isinstance(evidence, str) or len(evidence) > 2000:
             raise HTTPException(422, "each evidence item must be a string up to 2000 characters")
-    await db.prepare(
-        "UPDATE agent_tasks SET status = 'completed', result_summary = ?, updated_at = ? WHERE id = ?"
-    ).bind(payload.result_summary, now_iso(), task_id).run()
+    now = int(datetime.now(timezone.utc).timestamp())
+    completed = await db.prepare(
+        """UPDATE agent_tasks SET status = 'completed', result_summary = ?, updated_at = ?
+        WHERE id = ? AND status = 'in_progress' AND EXISTS (
+            SELECT 1 FROM task_execution_leases
+            WHERE task_id = ? AND worker_id = ? AND lease_token = ? AND expires_at > ?
+        ) RETURNING id"""
+    ).bind(payload.result_summary, now_iso(), task_id, task_id,
+           payload.worker_id, payload.lease_token, now).first()
+    if completed is None:
+        raise HTTPException(409, "task is no longer in progress or the lease is no longer valid")
     for evidence in payload.evidence:
         await db.prepare(
             """INSERT INTO task_execution_artifacts
             (id, task_id, artifact_type, artifact_name, content_json, created_at)
             VALUES (?, ?, 'evidence', 'owner_or_worker_supplied', ?, ?)"""
         ).bind(uuid4().hex, task_id, json.dumps({"evidence": evidence}), now_iso()).run()
-    await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
+    await db.prepare(
+        "DELETE FROM task_execution_leases WHERE task_id = ? AND worker_id = ? AND lease_token = ?"
+    ).bind(task_id, payload.worker_id, payload.lease_token).run()
     await write_audit(db, "agent_task.completed", task_id, payload.worker_id)
     return {"task_id": task_id, "status": "completed", "qa_status": "pending_review"}
 
