@@ -1,14 +1,6 @@
-import importlib.util
 import unittest
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-WORKER_PATH = ROOT / "cloudflare" / "worker.py"
-SPEC = importlib.util.spec_from_file_location("aura_cloudflare_worker", WORKER_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError("Could not load Cloudflare Worker module")
-worker = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(worker)
+from cloudflare import worker
 
 
 class CloudflareWorkerRuntimeTests(unittest.TestCase):
@@ -26,11 +18,12 @@ class CloudflareWorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(schema["paths"]["/opportunities"]["get"]["security"])
         self.assertFalse(schema["paths"]["/health"]["get"].get("security"))
 
-    def test_worker_handles_validation_errors_and_security_headers(self):
+    def test_worker_validation_and_security_middleware_are_registered(self):
         from fastapi.exceptions import RequestValidationError
+
         self.assertIn(RequestValidationError, worker.app.exception_handlers)
-        self.assertIn("add_security_headers", worker.app.middleware_stack.__class__.__name__.lower()
-                      if worker.app.middleware_stack is not None else "add_security_headers")
+        self.assertTrue(callable(worker.add_security_headers))
+        self.assertTrue(worker.app.user_middleware)
 
 
 if __name__ == "__main__":
