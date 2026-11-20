@@ -1,7 +1,7 @@
 [project]
 name = "aura-autopilot"
-version = "0.5.0"
-description = "AURA guarded revenue operations API and Cloudflare dashboard"
+version = "0.6.0"
+description = "AURA guarded multi-agent revenue operations API with skill context loading"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi",
