@@ -22,6 +22,11 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertEqual(entrypoint.value.func.attr, "entrypoint")
         self.assertIn("app", [arg.id for arg in entrypoint.value.args if isinstance(arg, ast.Name)])
 
+    def test_production_worker_disables_public_openapi_docs(self):
+        self.assertIn("openapi_url=None", SOURCE)
+        self.assertIn("docs_url=None", SOURCE)
+        self.assertIn("redoc_url=None", SOURCE)
+
     def test_worker_defines_api_key_scheme_and_safe_error_handler(self):
         self.assertIn('APIKeyHeader(name="X-AURA-API-Key"', SOURCE)
         self.assertIn("RequestValidationError", SOURCE)
