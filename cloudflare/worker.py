@@ -300,12 +300,13 @@ document.getElementById("contenttable").innerHTML=table(["Content","Platform","F
 let actions=[];
 if(x.rights_status!=="cleared")actions.push('<button data-rights-id="'+esc(x.id)+'" data-rights-status="cleared">Clear rights</button>');
 if(x.rights_status!=="not_cleared")actions.push('<button data-rights-id="'+esc(x.id)+'" data-rights-status="not_cleared">Not cleared</button>');
-if(x.status==="idea")actions.push('<button onclick="statusContent(\\''+x.id+'\\',\\'draft\\')">Draft</button>');
-else if(x.status==="draft")actions.push('<button onclick="statusContent(\\''+x.id+'\\',\\'in_review\\')">Review</button>');
-else if(x.status==="in_review"&&x.rights_status==="cleared")actions.push('<button onclick="statusContent(\\''+x.id+'\\',\\'approved\\')">Approve</button>');
+if(x.status==="idea")actions.push('<button data-content-id="'+esc(x.id)+'" data-content-status="draft">Draft</button>');
+else if(x.status==="draft")actions.push('<button data-content-id="'+esc(x.id)+'" data-content-status="in_review">Review</button>');
+else if(x.status==="in_review"&&x.rights_status==="cleared")actions.push('<button data-content-id="'+esc(x.id)+'" data-content-status="approved">Approve</button>');
 return [esc(x.title),esc(x.platform),esc(x.format),esc(x.rights_status),esc(x.status),actions.join(" ")||"—"];
 }));
 document.querySelectorAll("[data-rights-id]").forEach(button=>button.addEventListener("click",()=>reviewContentRights(button.dataset.rightsId,button.dataset.rightsStatus)));
+document.querySelectorAll("[data-content-id]").forEach(button=>button.addEventListener("click",()=>statusContent(button.dataset.contentId,button.dataset.contentStatus)));
 document.getElementById("approvaltable").innerHTML=table(["Action","Amount","Status","Created","Decision"],a.map(x=>[esc(x.description),fmt(x.amount),esc(x.status),esc(x.created_at),x.status==="pending"?' <button onclick="decide(\''+x.id+'\',\'approved\')">Approve</button> <button onclick="decide(\''+x.id+'\',\'rejected\')">Reject</button>':"—"]));
 document.getElementById("ledgertable").innerHTML=table(["Type","Category","Amount","Note","Created"],l.map(x=>[esc(x.entry_type),esc(x.category),fmt(x.amount),esc(x.note),esc(x.created_at)]))}
 
