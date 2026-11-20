@@ -56,3 +56,25 @@ The initial tools are `text_stats` and `unit_economics`. They run locally on sup
 This is an execution control plane, not an autonomous AI runtime. No model is called and no agent is running in the background. A worker still needs to be started by an authorized caller. Task results are marked `qa_status=pending_review`; completion is not equivalent to independent QA approval.
 
 Apply the complete `cloudflare/schema.sql` to D1 before deployment. The schema now includes `task_execution_leases` and `task_execution_artifacts`.
+
+
+## Research Intelligence Engine (v0.8.0)
+
+### Endpoints
+- `POST /research/runs`, `GET /research/runs`, `POST /research/runs/{id}/close`: track a research workstream.
+- `POST /research/sources`, `GET /research/sources`: ingest source metadata, public HTTPS URL, publisher, date and excerpt. A SHA-256 digest is stored for the submitted URL + excerpt.
+- `POST /research/sources/{id}/verify`: authenticated manual review marks a source verified or rejected. Submission alone never verifies a source.
+- `POST /opportunities/{id}/score`, `GET /opportunities/scores`: score eight dimensions from 1–5 using published weights.
+- `POST /research/compare`, `GET /research/compare/{id}`: save and retrieve ranked comparison snapshots.
+- `GET /ceo/recommendation/{comparison_id}`: produce a rule-based recommendation.
+- `POST /ceo/decisions`, `GET /ceo/decisions`: record the decision and rationale.
+
+### Scoring
+Weighted dimensions (total 100): demand 18, competition 10, unit economics 15, zero-capital fit 18, speed to revenue 10, skill fit 10, evidence quality 10, risk control 9. Each input is 1–5 and linearly normalized. Confidence is separate from the opportunity score: each manually verified source adds 20 points and each distinct verified publisher label adds 10, capped at 100.
+
+The CEO rule recommends a zero-cost pilot only when score >= 70, confidence >= 60, and estimated cost is zero. Scores >= 55 and confidence >= 35 request more evidence; other cases are deprioritized. Any non-zero estimated cost is held for owner cost approval. All decisions remain advisory and require owner approval before action.
+
+### Important operating boundary
+This release implements the research data model, scoring and decision-support APIs. It does not automatically search the live web, fetch the submitted URL, validate the truth of excerpts, or call an LLM. Source verification is a recorded authenticated manual review, not cryptographic proof of publisher authenticity. The SHA-256 digest proves only the exact submitted URL/excerpt string has not changed in storage. No public publishing, spending, external contact or financial execution is enabled.
+
+Apply the complete `cloudflare/schema.sql` to D1 before deployment.
