@@ -63,7 +63,7 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertNotIn("requests.post(", self.source)
 
     def test_task_context_prepare_endpoint_is_guarded(self):
-        self.assertRegex(self.source, r'@app\\.post\\("/agent-tasks/\\{task_id\\}/prepare".*require_api_key')
+        self.assertIn('@app.post("/agent-tasks/{task_id}/prepare", dependencies=[Depends(require_api_key)])', self.source)
         self.assertIn("agent_task.context_prepared", self.source)
         self.assertIn('"execution": "not_started"', self.source)
 
