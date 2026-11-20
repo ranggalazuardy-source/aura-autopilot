@@ -199,8 +199,9 @@ jobs:
 
           check_status() {
             local label="$1" expected="$2" path="$3" header_name="${4:-}" header_value="${5:-}"
-            local safe_name="${label//[^A-Za-z0-9_-]/_}" body="/tmp/aura-probe-${safe_name}.body"
-            local status
+            local safe_name body status
+            safe_name="${label//[^A-Za-z0-9_-]/_}"
+            body="/tmp/aura-probe-${safe_name}.body"
             if [[ -n "$header_name" ]]; then
               status="$(curl --silent --show-error --max-time 25 -o "$body" -w '%{http_code}' -H "$header_name: $header_value" "$WORKER_URL$path" || true)"
             else
