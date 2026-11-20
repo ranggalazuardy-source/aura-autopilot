@@ -1,0 +1,173 @@
+name: Deploy AURA to Cloudflare
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aura-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Provision, migrate and deploy AURA
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AURA_API_KEY: \${{ secrets.AURA_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || missing+=("CLOUDFLARE_API_TOKEN")
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || missing+=("CLOUDFLARE_ACCOUNT_ID")
+          [[ -n "$AURA_API_KEY" ]] || missing+=("AURA_API_KEY")
+          if (( \${#missing[@]} > 0 )); then
+            printf '::error::Missing GitHub repository secrets: %s\n' "\${missing[*]}"
+            exit 1
+          fi
+          echo "Required deployment secrets are present."
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Wrangler with static-assets base_path support
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy-tools
+          printf '{"private":true}\n' > .deploy-tools/package.json
+          npm install --prefix .deploy-tools --no-audit --no-fund --save-exact wrangler@4.148.0
+          echo "$GITHUB_WORKSPACE/.deploy-tools/node_modules/.bin" >> "$GITHUB_PATH"
+          wrangler --version
+
+      - name: Install Python Worker dependencies
+        run: uv sync --all-groups
+
+      - name: Build Virtual Office frontend
+        run: |
+          npm install --prefix virtual-office --no-audit --no-fund
+          npm run build --prefix virtual-office
+
+      - name: Compile and test AURA
+        run: |
+          python -m compileall -q app cloudflare
+          uv run python -m unittest discover -s tests -v
+
+      - name: Provision or reuse D1 database
+        id: d1
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run pywrangler d1 list --json > /tmp/aura-d1-list.json
+          DB_ID="$(node -e '
+            const fs = require("fs");
+            const parsed = JSON.parse(fs.readFileSync("/tmp/aura-d1-list.json", "utf8"));
+            const rows = Array.isArray(parsed) ? parsed : (parsed.result || parsed.databases || []);
+            const db = rows.find((item) => item.name === "aura-autopilot-db");
+            process.stdout.write(db ? (db.uuid || db.database_id || "") : "");
+          ')"
+
+          if [[ -z "$DB_ID" ]]; then
+            echo "Creating the AURA D1 database in the Asia-Pacific region."
+            uv run pywrangler d1 create aura-autopilot-db --location apac --update-config --binding DB
+            uv run pywrangler d1 list --json > /tmp/aura-d1-list.json
+            DB_ID="$(node -e '
+              const fs = require("fs");
+              const parsed = JSON.parse(fs.readFileSync("/tmp/aura-d1-list.json", "utf8"));
+              const rows = Array.isArray(parsed) ? parsed : (parsed.result || parsed.databases || []);
+              const db = rows.find((item) => item.name === "aura-autopilot-db");
+              process.stdout.write(db ? (db.uuid || db.database_id || "") : "");
+            ')"
+          else
+            echo "Reusing the existing AURA D1 database."
+          fi
+
+          if [[ -z "$DB_ID" ]]; then
+            echo "::error::Could not resolve the D1 database UUID."
+            exit 1
+          fi
+
+          export AURA_D1_DATABASE_ID="$DB_ID"
+          node <<'NODE'
+          const fs = require("fs");
+          const path = "wrangler.jsonc";
+          const config = JSON.parse(fs.readFileSync(path, "utf8"));
+          const binding = (config.d1_databases || []).find((item) => item.binding === "DB");
+          if (!binding) throw new Error("D1 binding DB is missing from wrangler.jsonc");
+          binding.database_id = process.env.AURA_D1_DATABASE_ID;
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");
+          NODE
+
+          echo "D1 database is ready."
+
+      - name: Apply D1 schema
+        run: uv run pywrangler d1 execute aura-autopilot-db --remote --file=cloudflare/schema.sql
+
+      - name: Initial Worker deployment
+        run: uv run pywrangler deploy
+
+      - name: Set AURA API key as a Worker secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$AURA_API_KEY" | uv run pywrangler secret put AURA_API_KEY
+
+      - name: Deploy the final Worker version
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run pywrangler deploy 2>&1 | tee /tmp/aura-deploy.log
+
+      - name: Verify the public AURA hostname and routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKER_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' /tmp/aura-deploy.log | tail -n 1 || true)"
+          if [[ -z "$WORKER_URL" ]]; then
+            echo "::error::The deploy output did not include a workers.dev URL. Check whether the workers.dev subdomain is enabled for this account."
+            exit 1
+          fi
+
+          echo "Checking $WORKER_URL"
+          curl --fail --silent --show-error "$WORKER_URL/health" | tee /tmp/aura-health.json
+          curl --fail --silent --show-error "$WORKER_URL/" | grep -q "Operations Dashboard"
+          curl --fail --silent --show-error "$WORKER_URL/dashboard" | grep -q "AURA"
+          curl --fail --silent --show-error "$WORKER_URL/office/" | grep -q "Virtual AI Office"
+          curl --fail --silent --show-error \
+            -H "X-AURA-API-Key: $AURA_API_KEY" \
+            "$WORKER_URL/office/state" > /tmp/aura-office-state.json
+
+          echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
+          {
+            echo "## AURA deployment successful"
+            echo
+            echo "Base URL: $WORKER_URL"
+            echo
+            echo "- Main dashboard: $WORKER_URL/dashboard"
+            echo "- 3D Virtual Office: $WORKER_URL/office/"
+            echo "- Health: $WORKER_URL/health"
+            echo "- Authenticated office telemetry: verified"
+          } >> "$GITHUB_STEP_SUMMARY"
