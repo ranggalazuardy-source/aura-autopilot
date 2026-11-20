@@ -185,7 +185,7 @@ jobs:
 
           echo "Checking $WORKER_URL"
           TAIL_LOG=/tmp/aura-worker-tail.jsonl
-          timeout 90s wrangler tail aura-autopilot-api --format json --sampling-rate 1 > "$TAIL_LOG" 2>&1 &
+          timeout 90s wrangler tail aura-autopilot-api --format json --sampling-rate 0.99 > "$TAIL_LOG" 2>&1 &
           TAIL_PID=$!
           cleanup_tail() {
             kill "$TAIL_PID" >/dev/null 2>&1 || true
