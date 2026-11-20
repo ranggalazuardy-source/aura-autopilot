@@ -1,6 +1,6 @@
 [project]
 name = "aura-autopilot"
-version = "0.9.0"
+version = "0.9.1"
 description = "AURA guarded multi-agent revenue operations API with skill context loading"
 requires-python = ">=3.13"
 dependencies = [
