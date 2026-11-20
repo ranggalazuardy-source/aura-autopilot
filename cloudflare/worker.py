@@ -290,22 +290,8 @@ if(apiKey){document.getElementById("key").value=apiKey;connect()}
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root():
-    return HTMLResponse("""<!doctype html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b1020"><title>AURA — Revenue Operations</title>
-<style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0,#252044,#0b1020 52%);color:#eef2ff;font:16px/1.5 Inter,system-ui,Segoe UI,sans-serif;display:grid;place-items:center;padding:24px}
-main{width:min(920px,100%)}.eyebrow{color:#a99be8;letter-spacing:.2em;font-size:11px;font-weight:800}h1{font-size:clamp(38px,8vw,68px);letter-spacing:-.06em;margin:12px 0}.intro{color:#aebbd0;max-width:620px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:32px}.card{display:block;text-decoration:none;color:inherit;background:#141e33;border:1px solid #303c59;border-radius:18px;padding:22px;transition:.18s}.card:hover{transform:translateY(-3px);border-color:#a78bfa;background:#1a2540}.icon{font-size:26px}.card h2{font-size:20px;margin:10px 0 4px}.card p{margin:0;color:#9eacc4;font-size:14px}.footer{margin-top:28px;color:#75839d;font-size:12px}@media(max-width:620px){.grid{grid-template-columns:1fr}}
-</style></head><body><main>
-<div class="eyebrow">AUTONOMOUS UNIFIED REVENUE AGENT · v""" + VERSION + """</div>
-<h1>AURA</h1><p class="intro">Satu pusat kendali untuk seluruh operasi bisnis, riset peluang, produksi konten, dan AI agent lu.</p>
-<div class="grid">
-<a class="card" href="/dashboard"><span class="icon">⌘</span><h2>Operations Dashboard</h2><p>Kelola peluang, riset, content queue, approvals, finance, dan task agent.</p></a>
-<a class="card" href="/office/"><span class="icon">▦</span><h2>3D Virtual AI Office</h2><p>Lihat 15 agent, aktivitas kerja, task aktif, dan audit log di kantor virtual.</p></a>
-</div>
-<div class="footer">Guarded autonomy · Zero-capital mode · Owner approval required for gated actions</div>
-</main></body></html>""")
-
+    # Keep the landing route simple and independent of runtime HTML interpolation.
+    return HTMLResponse(content=DASHBOARD)
 
 @app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard():
