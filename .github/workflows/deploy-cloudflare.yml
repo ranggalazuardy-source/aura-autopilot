@@ -159,7 +159,7 @@ jobs:
           echo "Checking $WORKER_URL"
           curl --fail --silent --show-error "$WORKER_URL/health" -o /tmp/aura-health.json
           curl --fail --silent --show-error "$WORKER_URL/" -o /tmp/aura-root.html
-          grep -q "Operations Dashboard" /tmp/aura-root.html
+          grep -q "AURA" /tmp/aura-root.html
           curl --fail --silent --show-error "$WORKER_URL/dashboard" -o /tmp/aura-dashboard.html
           grep -q "AURA" /tmp/aura-dashboard.html
           curl --fail --silent --show-error "$WORKER_URL/office/" -o /tmp/aura-office.html
@@ -167,6 +167,11 @@ jobs:
           curl --fail --silent --show-error \
             -H "X-AURA-API-Key: $AURA_API_KEY" \
             "$WORKER_URL/office/state" > /tmp/aura-office-state.json
+
+# Verify the dashboard's core authenticated data endpoints, not only the virtual office.
+for endpoint in opportunities approvals content ledger ledger/summary; do
+  curl --fail --silent --show-error -H "X-AURA-API-Key: $AURA_API_KEY" "$WORKER_URL/$endpoint" -o "/tmp/aura-${endpoint//\//-}.json"
+done
 
           echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
           {
