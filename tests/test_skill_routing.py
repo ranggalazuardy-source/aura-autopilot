@@ -67,6 +67,36 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("agent_task.context_prepared", self.source)
         self.assertIn('"execution": "not_started"', self.source)
 
+
+    def test_execution_schema_has_leases_and_artifacts(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS task_execution_leases", self.schema)
+        self.assertIn("CREATE TABLE IF NOT EXISTS task_execution_artifacts", self.schema)
+
+    def test_executor_endpoints_and_lease_guards_exist(self):
+        for route in [
+            '@app.post("/agent-tasks/claim-next"',
+            '@app.post("/agent-tasks/{task_id}/heartbeat"',
+            '@app.post("/agent-tasks/{task_id}/tools"',
+            '@app.post("/agent-tasks/{task_id}/complete"',
+            '@app.post("/agent-tasks/{task_id}/release"',
+            '@app.get("/tools"',
+        ]:
+            with self.subTest(route=route):
+                self.assertIn(route, self.source)
+        self.assertIn("async def get_valid_lease", self.source)
+        self.assertIn("hmac.compare_digest", self.source)
+
+    def test_only_local_pure_tools_are_registered(self):
+        self.assertIn('"text_stats"', self.source)
+        self.assertIn('"unit_economics"', self.source)
+        self.assertIn("AGENT_TOOL_ALLOWLIST", self.source)
+        self.assertNotIn("subprocess.", self.source)
+        self.assertNotIn("os.system(", self.source)
+
+    def test_task_execution_is_not_model_execution(self):
+        self.assertIn('"qa_status": "pending_review"', self.source)
+        self.assertIn('"permission": "local_pure"', self.source)
+
     def test_router_does_not_claim_execution(self):
         self.assertIn('"execution": "not_started"', self.source)
         self.assertIn('"agent_execution": "not_automated"', self.source)
