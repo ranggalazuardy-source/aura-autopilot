@@ -136,9 +136,9 @@ These documents are preparation only. They do not mean any Google, YouTube, TikT
 ## Mas Mas Wibu content operations (v0.4.0)
 
 The dashboard now includes a guarded Content tab and D1-backed content queue:
-- Create content ideas with platform, format, pillar, hook, script/notes and rights status.
-- Move ideas through idea → draft → in_review.
-- Approval is blocked unless rights_status is `cleared`.
+- Create content ideas with platform, format, pillar, hook and script/notes. Every new item starts as `needs_review`; the creation request cannot mark content rights-cleared.
+- Review source, license and permission evidence through the explicit `POST /content/{id}/rights` action. Marking content `not_cleared` automatically pauses the item.
+- Move content through controlled states: idea → draft → in_review → approved. Approval is blocked unless rights status is `cleared`, and invalid state jumps are rejected.
 - Status `approved` is an internal approval only; no video is uploaded or scheduled.
 - Initial Mas Mas Wibu starter backlog is seeded by `cloudflare/schema.sql` (14 YouTube Shorts ideas).
 
