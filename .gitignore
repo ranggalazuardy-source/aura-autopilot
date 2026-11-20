@@ -1,0 +1,43 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Databases and local state
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# JavaScript and build artifacts
+node_modules/
+**/node_modules/
+virtual-office/dist/
+dist/
+.deploy-tools/
+.wrangler/
+coverage/
+
+# Operating system and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
