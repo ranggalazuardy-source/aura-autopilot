@@ -91,7 +91,7 @@ The local SQLite FastAPI app under `app/main.py` remains a separate development 
 ```powershell
 python -m venv .venv
 .venv\\Scripts\\activate
-pip install -r requirements.txt
+pip install -r requirements-local.txt
 uvicorn app.main:app --reload
 ```
 
