@@ -885,7 +885,9 @@ async def invoke_cloudflare_model(env, context: dict) -> tuple[str, str]:
         raw = await binding.run(CLOUDFLARE_FREE_MODEL, {
             "messages": messages, "max_tokens": MAX_MODEL_OUTPUT_TOKENS, "temperature": 0.2,
         })
-    except Exception:
+    except Exception as exc:
+        if _is_quota_exhaustion(exc):
+            raise HTTPException(429, "Cloudflare Workers AI free-tier quota exhausted")
         raise HTTPException(503, "Cloudflare Workers AI request failed; no fallback was attempted")
     return _extract_model_text(_plain_model_result(raw)), CLOUDFLARE_FREE_MODEL
 
