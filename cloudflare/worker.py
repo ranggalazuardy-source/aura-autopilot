@@ -892,6 +892,8 @@ async def invoke_cloudflare_model(env, context: dict) -> tuple[str, str]:
 async def invoke_groq_model(env, context: dict) -> tuple[str, str]:
     if not _truthy_env(env, "AURA_GROQ_ENABLED"):
         raise HTTPException(403, "Groq alternative is disabled by owner configuration")
+    if not _truthy_env(env, "AURA_GROQ_FREE_TIER_CONFIRMED"):
+        raise HTTPException(403, "Owner must confirm Groq Free tier and no billing method before use")
     api_key = getattr(env, "GROQ_API_KEY", None) if env else None
     if not api_key:
         raise HTTPException(503, "GROQ_API_KEY secret is not configured")
@@ -950,7 +952,8 @@ def provider_adapter_status(env=None):
         "primary_binding_configured": cloudflare_binding,
         "groq_alternative": {
             "model": GROQ_FREE_MODEL, "key_configured": groq_configured,
-            "enabled": _truthy_env(env, "AURA_GROQ_ENABLED") if env else False,
+            "enabled": bool(env and _truthy_env(env, "AURA_GROQ_ENABLED") and _truthy_env(env, "AURA_GROQ_FREE_TIER_CONFIRMED")),
+            "free_tier_confirmed": _truthy_env(env, "AURA_GROQ_FREE_TIER_CONFIRMED") if env else False,
             "automatic_fallback": False,
         },
         "model_enabled": enabled,
@@ -958,7 +961,7 @@ def provider_adapter_status(env=None):
         "transport_enabled": bool(enabled and ((free_plan_confirmed and cloudflare_binding) or (groq_configured and _truthy_env(env, "AURA_GROQ_ENABLED")))),
         "daily_call_cap": MAX_MODEL_CALLS_PER_UTC_DAY,
         "max_output_tokens": MAX_MODEL_OUTPUT_TOKENS,
-        "reason": "Inference is fail-closed until model enablement and Workers Free plan confirmation are explicitly configured.",
+        "reason": "Inference is fail-closed until the selected provider's free-tier eligibility and model execution are explicitly enabled.",
     }
 
 
@@ -1002,6 +1005,8 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
             raise HTTPException(403, "Owner must confirm the Cloudflare Workers Free plan before zero-cost inference")
     elif not _truthy_env(env, "AURA_GROQ_ENABLED"):
         raise HTTPException(403, "Groq alternative is disabled by owner configuration")
+    elif not _truthy_env(env, "AURA_GROQ_FREE_TIER_CONFIRMED"):
+        raise HTTPException(403, "Owner must confirm Groq Free tier and no billing method before use")
     await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
     task = await db.prepare(
         "SELECT id, agent, objective, status FROM agent_tasks WHERE id = ?"
