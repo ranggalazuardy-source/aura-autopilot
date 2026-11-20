@@ -220,6 +220,6 @@ Create the production bundle before deployment:
 - npm run build --prefix virtual-office
 - uv run pywrangler deploy
 
-Wrangler serves the generated virtual-office/dist bundle under /office. Requests to /office/state miss the static asset manifest and fall through to the authenticated Python Worker API. The D1 schema must already be applied, and the Worker must have AURA_API_KEY configured.
+The `assets.base_path` setting requires Wrangler 4.148.0 or newer. Check the Wrangler version used by `pywrangler` before deployment; Cloudflare introduced this subpath feature in Wrangler 4.148.0. Wrangler serves the generated virtual-office/dist bundle under /office. Requests to /office/state miss the static asset manifest and fall through to the authenticated Python Worker API. The D1 schema must already be applied, and the Worker must have AURA_API_KEY configured.
 
 The UI can show real task state only after D1 and the Worker are deployed. When no valid lease exists, it deliberately does not animate an agent as working.
