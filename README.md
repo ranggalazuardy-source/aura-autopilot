@@ -79,6 +79,10 @@ After deployment, open the Worker URL and visit /health, /dashboard, then /offic
 
 If Cloudflare asks for payment information or proposes a paid upgrade, stop. Do not enter payment details or enable paid resources.
 
+### Free-plan security and recovery controls
+
+The Worker applies a Cloudflare-native throttle of 10 failed API-key attempts per minute per Cloudflare location and emits Workers Logs. The throttle is approximate and location-local; it is an abuse control, not a strict global quota. D1 Time Travel is automatically enabled for production-storage databases and provides up to 7 days of point-in-time recovery on the Free plan. Workers Logs on Free retain up to 3 days, with a daily log-write allowance. These windows are suitable for a small prototype, not long-term archival or compliance retention. Check the actual account usage and D1 storage version in Cloudflare before relying on recovery controls.
+
 ### Local development
 
 ```powershell
