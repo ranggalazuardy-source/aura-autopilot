@@ -244,7 +244,9 @@ The deployment workflow is .github/workflows/deploy-cloudflare.yml. It provision
 3. Generate a private AURA API key in PowerShell:
 
    $bytes = New-Object byte[] 32
-   [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+   $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+   $rng.GetBytes($bytes)
+   $rng.Dispose()
    $key = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
    Set-Clipboard $key
 
