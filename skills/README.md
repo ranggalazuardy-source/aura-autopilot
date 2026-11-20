@@ -23,4 +23,4 @@ AURA uses a curated, capability-based skill layer informed by [VoltAgent/awesome
 
 ## Runtime status
 
-These packs are documentation and agent instruction assets. The current AURA v0.5.0 task queue does not yet load or execute SKILL.md files dynamically. No additional API, paid service, market data feed, or broker connection is enabled by this change.
+These packs are documentation and agent instruction assets. The Worker now bundles AURA-authored runtime instruction bodies and assembles task-scoped context from the agent-to-pack registry. The human-readable files under `/skills` remain the reviewable source documents; the Worker does not read arbitrary files at runtime. Context preparation is active, while model invocation, external tools, paid data feeds and broker connections remain disabled.
