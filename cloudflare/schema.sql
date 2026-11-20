@@ -104,7 +104,7 @@ INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,stat
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_13','Finance & Treasury','Prepare 50/50 monthly close and cash reconciliation design','high','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_14','Compliance & Rights','Review proposed business models for legal, platform and IP constraints','high','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
 INSERT INTO agent_tasks (id,agent,objective,priority,related_opportunity_id,status,result_summary,created_at,updated_at) VALUES ('bootstrap_agent_15','QA / Auditor','Audit assumptions, agent outputs and task completion evidence','normal','','queued','', '2026-11-20T00:00:00+00:00','2026-11-20T00:00:00+00:00') ON CONFLICT(id) DO NOTHING;
-\n
+
 -- Deterministic agent-to-skill routing metadata. This records assignment only;
 -- it does not execute an LLM, external tool, integration, or financial action.
 CREATE TABLE IF NOT EXISTS task_skill_routes (
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS ceo_decisions (
     owner_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(owner_approval_required = 1),
     created_at TEXT NOT NULL,
     FOREIGN KEY(comparison_id) REFERENCES market_comparisons(id) ON DELETE CASCADE,
-    FOREIGN KEY(selected_opportunity_id) REFERENCES opportunities(id) ON DELETE SET DEFAULT
+    FOREIGN KEY(selected_opportunity_id) REFERENCES opportunities(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ceo_decisions_created ON ceo_decisions(created_at);
 
