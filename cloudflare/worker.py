@@ -935,10 +935,12 @@ async def invoke_groq_model(env, context: dict) -> tuple[str, str]:
             )
         if response.status_code == 429:
             raise HTTPException(429, "Groq free-tier quota/rate limit reached; execution stopped")
-        if response.status_code in (402, 403):
-            raise HTTPException(403, "Groq rejected the request; billing or account eligibility was not changed")
-        if response.status_code >= 400:
-            raise HTTPException(502, "Groq request failed; no paid fallback was attempted")
+        if response.status_code in (401, 402, 403):
+            raise HTTPException(403, "Groq authentication, billing or account eligibility check failed")
+        if 400 <= response.status_code < 500:
+            raise HTTPException(422, "Groq rejected the request; check the configured model and request")
+        if response.status_code >= 500:
+            raise HTTPException(503, "Groq is temporarily unavailable")
         return _extract_model_text(response.json()), GROQ_FREE_MODEL
     except HTTPException:
         raise
@@ -979,10 +981,12 @@ async def invoke_gemini_model(env, context: dict) -> tuple[str, str]:
             )
         if response.status_code == 429:
             raise HTTPException(429, "Gemini Free-tier quota/rate limit reached")
-        if response.status_code in (402, 403):
-            raise HTTPException(403, "Gemini rejected the request; billing or account eligibility was not changed")
-        if response.status_code >= 400:
-            raise HTTPException(502, "Gemini request failed; no paid fallback is permitted")
+        if response.status_code in (401, 402, 403):
+            raise HTTPException(403, "Gemini authentication, billing or account eligibility check failed")
+        if 400 <= response.status_code < 500:
+            raise HTTPException(422, "Gemini rejected the request; check the configured model and request")
+        if response.status_code >= 500:
+            raise HTTPException(503, "Gemini is temporarily unavailable")
         data = response.json()
         candidates = data.get("candidates", [])
         if not candidates:
@@ -1038,7 +1042,7 @@ def provider_adapter_status(env=None):
             "enabled": bool(env and _truthy_env(env, "AURA_GROQ_ENABLED") and groq_free),
             "free_tier_confirmed": groq_free,
         },
-        "automatic_fallback": ["cloudflare", "gemini", "groq"],
+        "automatic_fallback": ["cloudflare", "groq", "gemini"],
         "model_enabled": enabled,
         "cloudflare_free_plan_confirmed": cloudflare_free,
         "transport_enabled": bool(enabled and (
@@ -1048,7 +1052,7 @@ def provider_adapter_status(env=None):
         )),
         "daily_call_cap": MAX_MODEL_CALLS_PER_UTC_DAY,
         "max_output_tokens": MAX_MODEL_OUTPUT_TOKENS,
-        "reason": "Automatic failover is limited to explicitly enabled free-tier providers; billing and non-quota errors stop execution.",
+        "reason": "Automatic order is Cloudflare → Groq → Gemini. Failover handles quota exhaustion and transient upstream failures only; billing, authentication, configuration and invalid-request errors stop execution.",
     }
 
 
@@ -1100,7 +1104,7 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
         ),
     }
     if payload.provider == "auto":
-        providers = [name for name in ("cloudflare", "gemini", "groq")
+        providers = [name for name in ("cloudflare", "groq", "gemini")
                      if provider_config[name][0] and provider_config[name][1]]
     else:
         providers = [payload.provider]
@@ -1151,8 +1155,13 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
             selected_provider = provider
             break
         except HTTPException as exc:
-            is_quota = exc.status_code == 429 or _is_quota_exhaustion(exc.detail)
-            if payload.provider != "auto" or not is_quota or index == len(providers) - 1:
+            # Fail over only for quota exhaustion or transient upstream failures.
+            # Authentication, billing, configuration and invalid-request errors fail closed.
+            retryable = (
+                exc.status_code in (429, 502, 503, 504)
+                or _is_quota_exhaustion(exc.detail)
+            )
+            if payload.provider != "auto" or not retryable or index == len(providers) - 1:
                 await db.prepare(
                     "UPDATE model_execution_claims SET status = 'failed' WHERE task_id = ?"
                 ).bind(task_id).run()

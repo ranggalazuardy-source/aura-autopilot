@@ -62,7 +62,10 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("AURA_MODEL_ENABLED", self.source)
         self.assertIn("AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED", self.source)
         self.assertIn("AURA_GROQ_FREE_TIER_CONFIRMED", self.source)
-        self.assertIn("automatic_fallback", self.source)
+        self.assertIn('"automatic_fallback": ["cloudflare", "groq", "gemini"]', self.source)
+        self.assertIn('("cloudflare", "groq", "gemini")', self.source)
+        self.assertIn("exc.status_code in (429, 502, 503, 504)", self.source)
+        self.assertIn("billing, authentication, configuration and invalid-request errors stop execution", self.source)
         self.assertNotIn("requests.post(", self.source)
 
     def test_task_context_prepare_endpoint_is_guarded(self):
