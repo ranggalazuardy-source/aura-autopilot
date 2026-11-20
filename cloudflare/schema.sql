@@ -140,3 +140,74 @@ CREATE TABLE IF NOT EXISTS task_execution_artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_task_execution_artifacts_task ON task_execution_artifacts(task_id, created_at);
 
+
+
+-- Research Intelligence Engine: source provenance, transparent scoring and CEO decisions.
+CREATE TABLE IF NOT EXISTS research_runs (
+    id TEXT PRIMARY KEY,
+    agent TEXT NOT NULL,
+    query TEXT NOT NULL,
+    market_scope TEXT NOT NULL DEFAULT 'Indonesia',
+    status TEXT NOT NULL DEFAULT 'collecting' CHECK(status IN ('collecting','reviewing','completed','cancelled')),
+    started_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_research_runs_started ON research_runs(started_at);
+
+CREATE TABLE IF NOT EXISTS research_sources (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    opportunity_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    publisher TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK(source_type IN ('official','industry','news','community','academic','other')),
+    published_at TEXT NOT NULL DEFAULT '',
+    excerpt TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL,
+    verification_status TEXT NOT NULL DEFAULT 'unverified' CHECK(verification_status IN ('unverified','verified','rejected')),
+    reviewer_notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(run_id) REFERENCES research_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY(opportunity_id) REFERENCES opportunities(id) ON DELETE SET DEFAULT
+);
+CREATE INDEX IF NOT EXISTS idx_research_sources_run ON research_sources(run_id);
+CREATE INDEX IF NOT EXISTS idx_research_sources_opportunity ON research_sources(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_research_sources_status ON research_sources(verification_status);
+
+CREATE TABLE IF NOT EXISTS opportunity_scores (
+    opportunity_id TEXT PRIMARY KEY,
+    dimensions_json TEXT NOT NULL,
+    score REAL NOT NULL CHECK(score >= 0 AND score <= 100),
+    confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 100),
+    verified_sources INTEGER NOT NULL DEFAULT 0,
+    independent_publishers INTEGER NOT NULL DEFAULT 0,
+    recommendation TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    scored_at TEXT NOT NULL,
+    FOREIGN KEY(opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_opportunity_scores_rank ON opportunity_scores(score DESC, confidence DESC);
+
+CREATE TABLE IF NOT EXISTS market_comparisons (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    opportunity_ids_json TEXT NOT NULL,
+    comparison_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_comparisons_created ON market_comparisons(created_at);
+
+CREATE TABLE IF NOT EXISTS ceo_decisions (
+    id TEXT PRIMARY KEY,
+    comparison_id TEXT NOT NULL,
+    selected_opportunity_id TEXT NOT NULL DEFAULT '',
+    decision TEXT NOT NULL CHECK(decision IN ('recommend_pilot','collect_evidence','deprioritize')),
+    rationale TEXT NOT NULL,
+    owner_approval_required INTEGER NOT NULL DEFAULT 1 CHECK(owner_approval_required = 1),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(comparison_id) REFERENCES market_comparisons(id) ON DELETE CASCADE,
+    FOREIGN KEY(selected_opportunity_id) REFERENCES opportunities(id) ON DELETE SET DEFAULT
+);
+CREATE INDEX IF NOT EXISTS idx_ceo_decisions_created ON ceo_decisions(created_at);
+
