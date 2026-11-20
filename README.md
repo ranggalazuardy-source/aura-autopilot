@@ -189,3 +189,6 @@ Research source intake accepts HTTPS URLs and owner/worker-supplied excerpts. It
 ## Zero-cost Web Research Adapter (v0.9.0)
 
 AURA adds a public DuckDuckGo HTML search adapter for owner-initiated market research. Results are stored as unverified source leads with excerpts, publisher hostnames and content hashes. Search requests are rate-limited to 10 per 10 minutes globally per deployment. This is a best-effort public HTML integration, not a guaranteed search API; provider markup, availability and terms can change.
+
+
+The dashboard includes a Research tab for the same workflow: create run → search → inspect and verify source → link source to opportunity → score → compare → record CEO recommendation. All decisions remain advisory and require owner approval.
