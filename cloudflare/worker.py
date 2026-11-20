@@ -748,6 +748,14 @@ async def route_agent_task(task_id: str, db=Depends(get_db)):
 
 @app.post("/agent-tasks", dependencies=[Depends(require_api_key)])
 async def create_agent_task(payload: AgentTaskIn, db=Depends(get_db)):
+    # Validate registry/relationship inputs before creating a persistent queue row.
+    pack_ids = resolve_agent_skills(payload.agent)
+    if payload.related_opportunity_id:
+        opportunity = await db.prepare(
+            "SELECT id FROM opportunities WHERE id = ?"
+        ).bind(payload.related_opportunity_id).first()
+        if opportunity is None:
+            raise HTTPException(404, "related opportunity not found")
     task_id = uuid4().hex
     data = payload.model_dump()
     await db.prepare(
@@ -757,7 +765,7 @@ async def create_agent_task(payload: AgentTaskIn, db=Depends(get_db)):
     ).bind(task_id, data["agent"], data["objective"], data["priority"],
            data["related_opportunity_id"], now_iso(), now_iso()).run()
     await write_audit(db, "agent_task.queued", task_id, data["agent"])
-    pack_ids = await persist_task_route(db, task_id, data["agent"])
+    await persist_task_route(db, task_id, data["agent"])
     return {"id": task_id, "status": "queued", "skill_pack_ids": pack_ids, "execution": "not_started"}
 
 @app.get("/agent-tasks", dependencies=[Depends(require_api_key)])
@@ -1072,10 +1080,18 @@ async def complete_agent_task(task_id: str, payload: AgentTaskCompleteIn, db=Dep
 @app.post("/agent-tasks/{task_id}/release", dependencies=[Depends(require_api_key)])
 async def release_agent_task(task_id: str, payload: AgentTaskHeartbeatIn, db=Depends(get_db)):
     await get_valid_lease(db, task_id, payload.worker_id, payload.lease_token)
+    released = await db.prepare(
+        """UPDATE agent_tasks SET status = 'queued', updated_at = ?
+        WHERE id = ? AND status = 'in_progress' AND EXISTS (
+            SELECT 1 FROM task_execution_leases
+            WHERE task_id = ? AND worker_id = ? AND lease_token = ?
+        ) RETURNING id"""
+    ).bind(now_iso(), task_id, task_id, payload.worker_id, payload.lease_token).first()
+    if released is None:
+        raise HTTPException(409, "task is no longer in progress")
     await db.prepare(
-        "UPDATE agent_tasks SET status = 'queued', updated_at = ? WHERE id = ? AND status = 'in_progress'"
-    ).bind(now_iso(), task_id).run()
-    await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
+        "DELETE FROM task_execution_leases WHERE task_id = ? AND worker_id = ? AND lease_token = ?"
+    ).bind(task_id, payload.worker_id, payload.lease_token).run()
     await write_audit(db, "agent_task.released", task_id, payload.worker_id)
     return {"task_id": task_id, "status": "queued"}
 
@@ -1085,9 +1101,16 @@ async def update_agent_task(task_id: str, payload: AgentTaskStatusIn, db=Depends
     existing = await db.prepare("SELECT id, status FROM agent_tasks WHERE id = ?").bind(task_id).first()
     if existing is None:
         raise HTTPException(404, "agent task not found")
-    await db.prepare(
-        "UPDATE agent_tasks SET status = ?, result_summary = ?, updated_at = ? WHERE id = ?"
-    ).bind(payload.status, payload.result_summary, now_iso(), task_id).run()
+    if existing.status in {"completed", "cancelled"}:
+        raise HTTPException(409, "completed or cancelled tasks are terminal")
+    updated = await db.prepare(
+        """UPDATE agent_tasks SET status = ?, result_summary = ?, updated_at = ?
+        WHERE id = ? AND status IN ('queued', 'in_progress', 'blocked') RETURNING id"""
+    ).bind(payload.status, payload.result_summary, now_iso(), task_id).first()
+    if updated is None:
+        raise HTTPException(409, "task state changed; refresh before retrying")
+    # Manual state changes revoke any worker lease so stale workers cannot keep acting.
+    await db.prepare("DELETE FROM task_execution_leases WHERE task_id = ?").bind(task_id).run()
     await write_audit(db, "agent_task.status_changed", task_id, payload.status)
     return {"id": task_id, "status": payload.status, "agent_execution": "not_automated"}
 
@@ -1101,10 +1124,23 @@ SCORE_WEIGHTS = {
 
 
 def validate_public_https_url(value: str):
-    parsed = urlsplit(value)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+    try:
+        parsed = urlsplit(value)
+        host_value = parsed.hostname
+        # Force validation of a supplied port; urlsplit defers malformed-port errors.
+        parsed.port
+    except ValueError:
+        raise HTTPException(422, "source URL is malformed")
+    if (
+        parsed.scheme.lower() != "https"
+        or not host_value
+        or parsed.username
+        or parsed.password
+        or value.strip() != value
+        or any(ord(char) < 32 for char in value)
+    ):
         raise HTTPException(422, "source URL must be a public HTTPS URL without embedded credentials")
-    host = parsed.hostname.lower().rstrip(".")
+    host = host_value.lower().rstrip(".")
     if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
         raise HTTPException(422, "local hostnames are not valid research sources")
     try:
@@ -1248,6 +1284,7 @@ async def search_research_web(payload: ResearchSearchIn, db=Depends(get_db)):
 
 @app.post("/research/runs", dependencies=[Depends(require_api_key)])
 async def create_research_run(payload: ResearchRunIn, db=Depends(get_db)):
+    resolve_agent_skills(payload.agent)
     run_id = uuid4().hex
     await db.prepare(
         """INSERT INTO research_runs (id, agent, query, market_scope, status, started_at)
@@ -1263,8 +1300,8 @@ async def close_research_run(run_id: str, db=Depends(get_db)):
     run = await db.prepare("SELECT id, status FROM research_runs WHERE id = ?").bind(run_id).first()
     if run is None:
         raise HTTPException(404, "research run not found")
-    if run.status == "cancelled":
-        raise HTTPException(409, "cancelled research run cannot be completed")
+    if run.status != "collecting":
+        raise HTTPException(409, "only collecting research runs can be completed")
     await db.prepare(
         "UPDATE research_runs SET status = 'completed', completed_at = ? WHERE id = ?"
     ).bind(now_iso(), run_id).run()
@@ -1412,6 +1449,8 @@ async def list_opportunity_scores(db=Depends(get_db)):
 
 @app.post("/research/compare", dependencies=[Depends(require_api_key)])
 async def compare_opportunities(payload: MarketCompareIn, db=Depends(get_db)):
+    if len(set(payload.opportunity_ids)) != len(payload.opportunity_ids):
+        raise HTTPException(422, "opportunity_ids must be unique")
     rows = []
     for opportunity_id in payload.opportunity_ids:
         row = await db.prepare(
