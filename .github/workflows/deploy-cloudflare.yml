@@ -244,6 +244,8 @@ jobs:
           grep -qi "AURA" /tmp/aura-probe-root-html.body || { echo "::error::Root HTML missing AURA marker"; dump_diagnostics; exit 1; }
           check_status "dashboard-html" 200 "/dashboard"
           grep -qi "AURA" /tmp/aura-probe-dashboard-html.body || { echo "::error::Dashboard HTML missing AURA marker"; dump_diagnostics; exit 1; }
+          check_status "agent-console-html" 200 "/agents"
+          grep -qi "AURA Agent Console" /tmp/aura-probe-agent-console-html.body || { echo "::error::Agent Console HTML marker missing"; dump_diagnostics; exit 1; }
           check_status "office-static" 200 "/office/"
           grep -qi "Virtual AI Office" /tmp/aura-probe-office-static.body || { echo "::error::Virtual Office HTML marker missing"; dump_diagnostics; exit 1; }
           check_status "authenticated-office-state" 200 "/office/state" "X-AURA-API-Key" "$AURA_API_KEY"
