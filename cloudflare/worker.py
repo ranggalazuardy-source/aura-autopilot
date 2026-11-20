@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
-from workers import asgi
+from workers import asgi, handler
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -1717,6 +1717,29 @@ async def audit_entries(db=Depends(get_db)):
         FROM audit_log ORDER BY created_at DESC LIMIT 200"""
     ).all()
     return d1_rows(result)
+
+
+# Cloudflare Cron entrypoint. The trigger is provisioned, but execution remains
+# opt-in until an owner-approved worker policy and model adapter are configured.
+@handler
+async def on_scheduled(event, env, ctx):
+    scheduler_enabled = str(getattr(env, "AURA_SCHEDULER_ENABLED", "false")).lower() == "true"
+    if not scheduler_enabled:
+        print("AURA_SCHEDULER_SKIPPED", json.dumps({
+            "reason": "scheduler_disabled",
+            "scheduled_time": getattr(event, "scheduledTime", None),
+            "cron": getattr(event, "cron", None),
+        }))
+        return
+    # Safe bootstrap mode: do not claim tasks or call a model. A later runtime
+    # activation must add bounded dispatch, retries and per-task spend controls.
+    print("AURA_SCHEDULER_READY", json.dumps({
+        "mode": "observe_only",
+        "task_dispatch_enabled": False,
+        "model_provider_enabled": False,
+        "scheduled_time": getattr(event, "scheduledTime", None),
+        "cron": getattr(event, "cron", None),
+    }))
 
 
 # Use Cloudflare's official ASGI entrypoint. The adapter injects Worker bindings
