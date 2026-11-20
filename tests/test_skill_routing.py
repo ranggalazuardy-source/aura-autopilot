@@ -101,6 +101,17 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('"permission": "local_pure"', self.source)
 
 
+
+    def test_public_search_adapter_is_fixed_host_and_rate_limited(self):
+        self.assertIn('https://html.duckduckgo.com/html/?', self.source)
+        self.assertIn("10 queries per 10 minutes", self.source)
+        self.assertIn("async def search_research_web", self.source)
+        self.assertIn("class DuckDuckGoHTMLParser", self.source)
+        self.assertIn('"verification_status": "unverified"', self.source)
+
+    def test_research_search_logs_schema_exists(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS research_search_logs", self.schema)
+
     def test_research_intelligence_tables_exist(self):
         for table in ["research_runs", "research_sources", "opportunity_scores", "market_comparisons", "ceo_decisions"]:
             with self.subTest(table=table):
