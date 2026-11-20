@@ -266,3 +266,8 @@ The deployment workflow is .github/workflows/deploy-cloudflare.yml. It provision
 The deploy workflow does not create DNS records, purchase a domain, activate paid add-ons, or enable AI model spending. It uses the apac D1 location hint and the existing Workers/D1 account. Check the account's current plan and usage limits; do not approve a paid upgrade or enter payment information.
 
 After a successful deployment, the workflow summary prints the single base URL plus /dashboard and /office/. Use the same AURA API key when signing in to either page. The key is held only in the current browser tab's session storage and is never included in the frontend build.
+
+
+## Zero-capital model provider evaluation
+
+Provider alternatives and their current free-tier caveats are documented in [docs/model-provider-options.md](docs/model-provider-options.md). Cloudflare Workers AI is the preferred first prototype candidate, with Groq as an optional external alternative and Gemini as an opt-in option. This is an evaluation only: model transport and the scheduler remain disabled, no provider is selected, and no paid fallback or spending is authorized.
