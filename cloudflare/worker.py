@@ -19,6 +19,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, StrictBool
 from workers import asgi, handler
 from app.services.patch_approval_issuer import issue_patch_approval_receipt
+from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -191,6 +192,17 @@ class PatchApprovalReceiptIn(BaseModel):
     approved_paths: list[str] = Field(min_length=1, max_length=6)
     ttl_seconds: int = Field(default=300, ge=1, le=600)
     confirm_owner_approval: StrictBool
+
+
+
+
+class RepairExecutionRequestIn(BaseModel):
+    incident_id: str = Field(min_length=1, max_length=64)
+    base_sha: str = Field(min_length=40, max_length=40)
+    patch_text: str = Field(min_length=1, max_length=256000)
+    approved_paths: list[str] = Field(min_length=1, max_length=6)
+    approval_receipt_id: str = Field(min_length=32, max_length=128)
+    ttl_seconds: int = Field(default=300, ge=1, le=600)
 
 
 class OpportunityIn(BaseModel):
@@ -2209,6 +2221,56 @@ async def issue_repair_approval(
         "expires_in_seconds": payload.ttl_seconds,
         "status": "issued",
     }
+
+
+@app.post("/repair/execution-requests", dependencies=[Depends(require_api_key)])
+async def create_repair_execution_request(payload: RepairExecutionRequestIn, request: Request, db=Depends(get_db)):
+    """Persist a patch request only when its owner receipt exactly matches it."""
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+    patch_sha = hashlib.sha256(payload.patch_text.encode("utf-8")).hexdigest()
+    paths_json = json.dumps(sorted(payload.approved_paths), separators=(",", ":"))
+    receipt = await db.prepare(
+        """SELECT id FROM patch_approval_receipts
+        WHERE id = ? AND approved_by = ? AND incident_id = ? AND base_sha = ?
+          AND patch_sha256 = ? AND approved_paths_json = ? AND expires_at > ?
+          AND revoked_at IS NULL AND consumed_at IS NULL"""
+    ).bind(payload.approval_receipt_id, owner_id, payload.incident_id,
+           payload.base_sha, patch_sha, paths_json, int(datetime.now(timezone.utc).timestamp())).first()
+    if not receipt:
+        raise HTTPException(403, "A matching, unexpired, unused owner approval receipt is required")
+    try:
+        result = await create_execution_request(
+            db, incident_id=payload.incident_id, base_sha=payload.base_sha,
+            patch_text=payload.patch_text, approved_paths=payload.approved_paths,
+            receipt_id=payload.approval_receipt_id, ttl_seconds=payload.ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    await write_audit(db, "patch_execution.request_queued", result["request_id"],
+                      f"incident={payload.incident_id}; base={payload.base_sha}; patch={patch_sha}")
+    return result
+
+
+@app.get("/repair/runner/{request_id}/patch")
+async def fetch_repair_patch(request_id: str, request: Request, db=Depends(get_db)):
+    """Runner-only, one-time patch retrieval using a dedicated shared secret."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        raise HTTPException(401, "Invalid repair runner credential")
+    claimed = await claim_execution_patch(db, request_id=request_id)
+    if claimed is None:
+        raise HTTPException(404, "Execution request is expired, unavailable, or already claimed")
+    await write_audit(db, "patch_execution.patch_claimed", request_id,
+                      f"incident={claimed['incident_id']}; base={claimed['base_sha']}")
+    return claimed
 
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
