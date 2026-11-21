@@ -75,8 +75,33 @@ jobs:
               "incident_id": payload["incident_id"], "approval_receipt_id": payload["approval_receipt_id"]
           }))
           PY
-      - name: Apply patch to isolated checkout
-        run: git apply --check /tmp/repair.patch && git apply /tmp/repair.patch
+      - name: Verify exact base and apply patch to isolated checkout
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          git apply --check /tmp/repair.patch
+          git apply /tmp/repair.patch
+      - name: Enforce patch content and metadata policy before tests
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess
+          from app.patch_policy import ChangedFile, evaluate_patch
+          from app.patch_content_policy import evaluate_unified_diff
+          patch = pathlib.Path("/tmp/repair.patch").read_text(encoding="utf-8")
+          raw = subprocess.check_output(["git", "diff", "--numstat", "HEAD"], text=True)
+          files = []
+          for line in raw.splitlines():
+              additions, deletions, path = line.split(chr(9), 2)
+              if additions == "-" or deletions == "-":
+                  raise SystemExit("binary patch is not allowed")
+              add, delete = int(additions), int(deletions)
+              files.append(ChangedFile(path, "modified", add, delete, add + delete))
+          metadata = evaluate_patch(files)
+          content = evaluate_unified_diff(patch, files)
+          if not metadata.allowed or not content.allowed:
+              raise SystemExit("patch policy blocked: " + repr(metadata.reasons + content.reasons))
+          PY
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
