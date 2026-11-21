@@ -1,11 +1,13 @@
 name: AURA guarded repair runner
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       request_id:
         description: Opaque D1 execution request ID
-        required: true
+        required: false
         type: string
       base_sha:
         description: Exact base commit SHA bound to the request
@@ -20,11 +22,48 @@ permissions:
   contents: read
 
 concurrency:
-  group: aura-repair-${{ inputs.request_id }}
+  group: aura-repair-${{ needs.acquire-request.outputs.request_id }}
   cancel-in-progress: false
 
 jobs:
+  acquire-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      request_id: ${{ steps.acquire.outputs.request_id }}
+      base_sha: ${{ steps.acquire.outputs.base_sha }}
+      expires_at: ${{ steps.acquire.outputs.expires_at }}
+    steps:
+      - name: Reserve next queued request or use manual input
+        id: acquire
+        env:
+          INPUT_REQUEST_ID: ${{ inputs.request_id }}
+          INPUT_BASE_SHA: ${{ needs.acquire-request.outputs.base_sha }}
+          INPUT_EXPIRES_AT: ${{ needs.acquire-request.outputs.expires_at }}
+          RUNNER_SECRET: ${{ secrets.AURA_REPAIR_RUNNER_SECRET }}
+          API_BASE: ${{ vars.AURA_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_REQUEST_ID" ]; then
+            printf 'request_id=%s\\nbase_sha=%s\\nexpires_at=%s\\n' "$INPUT_REQUEST_ID" "$INPUT_BASE_SHA" "$INPUT_EXPIRES_AT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -n "$RUNNER_SECRET" || { echo "::error::AURA_REPAIR_RUNNER_SECRET is not configured"; exit 1; }
+          test -n "$API_BASE" || { echo "::error::AURA_API_BASE_URL is not configured"; exit 1; }
+          curl --fail --silent --show-error -X POST -H "X-AURA-Runner-Key: $RUNNER_SECRET" "$API_BASE/repair/runner/next" -o /tmp/next.json
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          item=json.loads(pathlib.Path('/tmp/next.json').read_text())
+          if item.get('status') == 'empty':
+              print('request_id=')
+          else:
+              print('request_id=' + item['request_id'])
+              print('base_sha=' + item['base_sha'])
+              print('expires_at=' + str(item['expires_at']))
+          PY
   validate-patch:
+    needs: acquire-request
+    if: needs.acquire-request.outputs.request_id != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -133,7 +172,8 @@ jobs:
           retention-days: 1
 
   publish-draft-pr:
-    needs: validate-patch
+    needs: [acquire-request, validate-patch]
+    if: needs.acquire-request.outputs.request_id != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
