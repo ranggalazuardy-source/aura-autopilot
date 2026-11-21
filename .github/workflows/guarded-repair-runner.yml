@@ -64,6 +64,7 @@ jobs:
           payload = json.loads(pathlib.Path("/tmp/repair-response.json").read_text())
           assert payload["request_id"] == os.environ["REQUEST_ID"]
           assert payload["base_sha"] == "${{ inputs.base_sha }}"
+          assert str(payload["expires_at"]) == "${{ inputs.expires_at }}"
           patch = payload["patch_text"]
           digest = hashlib.sha256(patch.encode()).hexdigest()
           assert digest == payload["patch_sha256"]
