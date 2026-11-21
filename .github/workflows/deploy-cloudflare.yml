@@ -291,15 +291,21 @@ jobs:
           done
           check_status "unauthenticated-opportunities" 401 "/opportunities"
           check_status "unauthenticated-office-state" 401 "/office/state"
+          check_status "unauthenticated-repair-incidents" 401 "/repair/incidents"
+          check_status "unauthenticated-repair-proposals" 401 "/repair/proposals"
           check_status "root-html" 200 "/"
           grep -qi "AURA" /tmp/aura-probe-root-html.body || { echo "::error::Root HTML missing AURA marker"; dump_diagnostics; exit 1; }
           check_status "dashboard-html" 200 "/dashboard"
           grep -qi "AURA" /tmp/aura-probe-dashboard-html.body || { echo "::error::Dashboard HTML missing AURA marker"; dump_diagnostics; exit 1; }
           check_status "agent-console-html" 200 "/agents"
           grep -qi "AURA Agent Console" /tmp/aura-probe-agent-console-html.body || { echo "::error::Agent Console HTML marker missing"; dump_diagnostics; exit 1; }
+          check_status "it-repair-console-html" 200 "/it"
+          grep -qi "IT &amp; AI Engineering\\|IT & AI Engineering" /tmp/aura-probe-it-repair-console-html.body || { echo "::error::IT & AI Engineering console marker missing"; dump_diagnostics; exit 1; }
           check_status "office-static" 200 "/office/"
           grep -qi "Virtual AI Office" /tmp/aura-probe-office-static.body || { echo "::error::Virtual Office HTML marker missing"; dump_diagnostics; exit 1; }
           check_status "authenticated-office-state" 200 "/office/state" "X-AURA-API-Key" "$AURA_API_KEY"
+          check_status "authenticated-repair-incidents" 200 "/repair/incidents" "X-AURA-API-Key" "$AURA_API_KEY"
+          check_status "authenticated-repair-proposals" 200 "/repair/proposals" "X-AURA-API-Key" "$AURA_API_KEY"
           for endpoint in opportunities approvals content ledger ledger/summary; do
             check_status "authenticated-$endpoint" 200 "/$endpoint" "X-AURA-API-Key" "$AURA_API_KEY"
           done
