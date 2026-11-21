@@ -305,6 +305,14 @@ class RepairIncidentGenerateIn(BaseModel):
     confirm_provider_inference: StrictBool
 
 
+class RepairProposalApprovalIn(BaseModel):
+    confirm_owner_approval: StrictBool
+
+
+class RepairProposalQueueIn(BaseModel):
+    confirm_owner_queue: StrictBool
+
+
 class OpportunityScoreIn(BaseModel):
     demand: int = Field(ge=1, le=5)
     competition: int = Field(ge=1, le=5)
@@ -966,6 +974,7 @@ GEMINI_FREE_MODEL = "gemini-2.5-flash-lite"
 MAX_MODEL_PROMPT_CHARS = 24000
 MAX_MODEL_OUTPUT_TOKENS = 1024
 MAX_MODEL_CALLS_PER_UTC_DAY = 5
+REPAIR_PROPOSAL_TTL_SECONDS = 1800
 
 
 def _truthy_env(env, name: str) -> bool:
@@ -2536,25 +2545,222 @@ async def generate_ci_repair_proposal(
             "detail": "Repair proposal was blocked",
             "reasons": list(proposal.reasons),
         })
+    proposal_id = uuid4().hex
+    created_at = int(datetime.now(timezone.utc).timestamp())
+    expires_at = created_at + REPAIR_PROPOSAL_TTL_SECONDS
+    approved_paths = sorted(proposal.changed_paths)
+    await db.prepare(
+        """INSERT INTO repair_patch_proposals
+           (id, incident_id, base_sha, patch_sha256, patch_text, approved_paths_json,
+            status, expires_at, created_at, approval_receipt_id, execution_request_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'proposed', ?, ?, NULL, NULL)"""
+    ).bind(
+        proposal_id, proposal.incident_id, proposal.base_sha, proposal.patch_sha256,
+        proposal.patch_text, json.dumps(approved_paths, separators=(",", ":")),
+        expires_at, created_at,
+    ).run()
     await write_audit(
         db,
         "operational.repair_patch_proposed",
-        incident_id,
-        f"patch_sha256={proposal.patch_sha256}; paths={len(proposal.changed_paths)}",
+        proposal_id,
+        f"incident={incident_id}; patch_sha256={proposal.patch_sha256}; paths={len(approved_paths)}",
     )
     return {
+        "proposal_id": proposal_id,
         "incident_id": proposal.incident_id,
         "base_sha": proposal.base_sha,
         "patch_text": proposal.patch_text,
         "patch_sha256": proposal.patch_sha256,
-        "changed_paths": list(proposal.changed_paths),
+        "changed_paths": approved_paths,
         "status": proposal.status,
+        "expires_at": expires_at,
         "requires_owner_approval": True,
         "provider_invoked": proposal.provider_invoked,
         "files_written": False,
         "github_written": False,
         "merged": False,
         "deployed": False,
+    }
+
+
+@app.get("/repair/proposals/{proposal_id}", dependencies=[Depends(require_api_key)])
+async def get_repair_proposal(proposal_id: str, db=Depends(get_db)):
+    """Return the exact stored diff for owner review; never returns an approval token."""
+    if not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+        raise HTTPException(404, "Repair proposal not found")
+    row = await db.prepare(
+        """SELECT id, incident_id, base_sha, patch_sha256, patch_text,
+                  approved_paths_json, status, expires_at, created_at
+           FROM repair_patch_proposals WHERE id = ?"""
+    ).bind(proposal_id).first()
+    if row is None:
+        raise HTTPException(404, "Repair proposal not found")
+    now = int(datetime.now(timezone.utc).timestamp())
+    if int(row.expires_at) <= now and row.status in {"proposed", "approved"}:
+        await db.prepare(
+            "UPDATE repair_patch_proposals SET status = 'expired' WHERE id = ? AND status IN ('proposed','approved')"
+        ).bind(proposal_id).run()
+        raise HTTPException(410, "Repair proposal has expired")
+    return {
+        "proposal_id": row.id,
+        "incident_id": row.incident_id,
+        "base_sha": row.base_sha,
+        "patch_sha256": row.patch_sha256,
+        "patch_text": row.patch_text,
+        "approved_paths": json.loads(row.approved_paths_json),
+        "status": row.status,
+        "expires_at": row.expires_at,
+        "requires_owner_approval": row.status == "proposed",
+    }
+
+
+@app.post("/repair/proposals/{proposal_id}/approve", dependencies=[Depends(require_api_key)])
+async def approve_repair_proposal(
+    proposal_id: str,
+    payload: RepairProposalApprovalIn,
+    request: Request,
+    db=Depends(get_db),
+):
+    """Issue an owner receipt bound to the exact persisted proposal."""
+    if not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+        raise HTTPException(404, "Repair proposal not found")
+    if payload.confirm_owner_approval is not True:
+        raise HTTPException(400, "Explicit owner approval confirmation is required")
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+    now = int(datetime.now(timezone.utc).timestamp())
+    row = await db.prepare(
+        """SELECT id, incident_id, base_sha, patch_sha256, approved_paths_json,
+                  status, expires_at
+           FROM repair_patch_proposals WHERE id = ?"""
+    ).bind(proposal_id).first()
+    if row is None:
+        raise HTTPException(404, "Repair proposal not found")
+    if row.status != "proposed" or int(row.expires_at) <= now:
+        raise HTTPException(409, "Repair proposal is not awaiting approval or has expired")
+    claim = await db.prepare(
+        """UPDATE repair_patch_proposals SET status = 'approving'
+           WHERE id = ? AND status = 'proposed' AND expires_at > ?
+           RETURNING id"""
+    ).bind(proposal_id, now).first()
+    if claim is None:
+        raise HTTPException(409, "Repair proposal approval is already being processed")
+    paths = json.loads(row.approved_paths_json)
+    ttl_seconds = min(600, int(row.expires_at) - now)
+    try:
+        receipt_id = await issue_patch_approval_receipt(
+            db,
+            authenticated_owner_id=owner_id,
+            incident_id=row.incident_id,
+            base_sha=row.base_sha,
+            patch_sha256=row.patch_sha256,
+            approved_paths=paths,
+            ttl_seconds=ttl_seconds,
+        )
+    except ValueError as exc:
+        await db.prepare(
+            "UPDATE repair_patch_proposals SET status = 'proposed' WHERE id = ? AND status = 'approving'"
+        ).bind(proposal_id).run()
+        raise HTTPException(422, str(exc))
+    await db.prepare(
+        """UPDATE repair_patch_proposals
+           SET status = 'approved', approval_receipt_id = ?
+           WHERE id = ? AND status = 'approving'"""
+    ).bind(receipt_id, proposal_id).run()
+    await write_audit(
+        db, "patch_approval.issued", proposal_id,
+        f"incident={row.incident_id}; patch={row.patch_sha256}; paths={len(paths)}; ttl={ttl_seconds}",
+    )
+    return {
+        "proposal_id": proposal_id,
+        "receipt_status": "issued",
+        "expires_in_seconds": ttl_seconds,
+        "status": "approved",
+    }
+
+
+@app.post("/repair/proposals/{proposal_id}/queue", dependencies=[Depends(require_api_key)])
+async def queue_approved_repair_proposal(
+    proposal_id: str,
+    payload: RepairProposalQueueIn,
+    request: Request,
+    db=Depends(get_db),
+):
+    """Queue the exact approved D1 proposal; runner still needs to pass isolated tests."""
+    if not re.fullmatch(r"[0-9a-f]{32}", proposal_id):
+        raise HTTPException(404, "Repair proposal not found")
+    if payload.confirm_owner_queue is not True:
+        raise HTTPException(400, "Explicit owner queue confirmation is required")
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+    now = int(datetime.now(timezone.utc).timestamp())
+    row = await db.prepare(
+        """SELECT id, incident_id, base_sha, patch_sha256, patch_text,
+                  approved_paths_json, approval_receipt_id, status, expires_at
+           FROM repair_patch_proposals WHERE id = ?"""
+    ).bind(proposal_id).first()
+    if row is None:
+        raise HTTPException(404, "Repair proposal not found")
+    if row.status != "approved" or int(row.expires_at) <= now or not row.approval_receipt_id:
+        raise HTTPException(409, "Repair proposal is not approved, has expired, or is already queued")
+    paths = json.loads(row.approved_paths_json)
+    paths_json = json.dumps(sorted(paths), separators=(",", ":"))
+    receipt = await db.prepare(
+        """SELECT id, expires_at FROM patch_approval_receipts
+           WHERE id = ? AND approved_by = ? AND incident_id = ? AND base_sha = ?
+             AND patch_sha256 = ? AND approved_paths_json = ? AND expires_at > ?
+             AND revoked_at IS NULL AND consumed_at IS NULL"""
+    ).bind(
+        row.approval_receipt_id, owner_id, row.incident_id, row.base_sha,
+        row.patch_sha256, paths_json, now,
+    ).first()
+    if receipt is None:
+        raise HTTPException(403, "Matching, unexpired, unused owner receipt is required")
+    claim = await db.prepare(
+        """UPDATE repair_patch_proposals SET status = 'queueing'
+           WHERE id = ? AND status = 'approved' AND approval_receipt_id = ?
+             AND expires_at > ?
+           RETURNING id"""
+    ).bind(proposal_id, row.approval_receipt_id, now).first()
+    if claim is None:
+        raise HTTPException(409, "Repair proposal queueing is already being processed")
+    try:
+        result = await create_execution_request(
+            db,
+            incident_id=row.incident_id,
+            base_sha=row.base_sha,
+            patch_text=row.patch_text,
+            approved_paths=paths,
+            receipt_id=row.approval_receipt_id,
+            ttl_seconds=min(600, int(receipt.expires_at) - now),
+        )
+    except ValueError as exc:
+        await db.prepare(
+            "UPDATE repair_patch_proposals SET status = 'approved' WHERE id = ? AND status = 'queueing'"
+        ).bind(proposal_id).run()
+        raise HTTPException(422, str(exc))
+    await db.prepare(
+        """UPDATE repair_patch_proposals
+           SET status = 'queued', execution_request_id = ?
+           WHERE id = ? AND status = 'queueing'"""
+    ).bind(result["request_id"], proposal_id).run()
+    await write_audit(
+        db, "patch_execution.request_queued", result["request_id"],
+        f"proposal={proposal_id}; incident={row.incident_id}; base={row.base_sha}; patch={row.patch_sha256}",
+    )
+    return {
+        "proposal_id": proposal_id,
+        "status": "queued",
+        **result,
+        "owner_approval_required": False,
+        "merge_required": True,
+        "deployment_required": True,
     }
 
 

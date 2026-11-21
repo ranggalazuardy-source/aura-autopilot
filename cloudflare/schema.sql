@@ -334,3 +334,26 @@ CREATE TABLE IF NOT EXISTS repair_execution_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_repair_execution_requests_status_expiry
     ON repair_execution_requests(status, expires_at);
+
+
+-- Owner-reviewable repair proposals, persisted before any approval or runner queueing.
+CREATE TABLE IF NOT EXISTS repair_patch_proposals (
+    id TEXT PRIMARY KEY CHECK(length(id) = 32),
+    incident_id TEXT NOT NULL REFERENCES operational_incidents(id),
+    base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
+    patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
+    patch_text TEXT NOT NULL CHECK(length(patch_text) BETWEEN 1 AND 256000),
+    approved_paths_json TEXT NOT NULL
+        CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
+    status TEXT NOT NULL DEFAULT 'proposed'
+        CHECK(status IN ('proposed','approving','approved','queueing','queued','expired','blocked')),
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    approval_receipt_id TEXT,
+    execution_request_id TEXT,
+    CHECK(expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_repair_patch_proposals_status_expiry
+    ON repair_patch_proposals(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_repair_patch_proposals_incident
+    ON repair_patch_proposals(incident_id, created_at);
