@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import math
 from uuid import uuid4
 import hmac
@@ -62,6 +63,7 @@ async def unexpected_error_handler(request: Request, exc: Exception):
         str(exc)[:500],
     )
     traceback.print_exc()
+    await persist_runtime_exception(request, error_id, exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "error_id": error_id,
@@ -134,6 +136,51 @@ async def write_audit(db, event_type: str, object_id: str, details: str = ""):
     await db.prepare(
         "INSERT INTO audit_log (id, event_type, object_id, details, created_at) VALUES (?, ?, ?, ?, ?)"
     ).bind(uuid4().hex, event_type, object_id, details[:1000], now_iso()).run()
+
+
+async def record_operational_incident(db, source: str, fingerprint: str, summary: str, severity: str = "high"):
+    """Deduplicate an incident and create a no-cost IT response task."""
+    incident_id = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    task_id = "incident_" + incident_id
+    timestamp = now_iso()
+    await db.prepare(
+        """INSERT INTO operational_incidents
+        (id, fingerprint, source, severity, summary, status, occurrence_count, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, 'open', 1, ?, ?)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          occurrence_count = operational_incidents.occurrence_count + 1,
+          last_seen_at = excluded.last_seen_at,
+          summary = excluded.summary,
+          severity = CASE WHEN excluded.severity = 'critical' THEN 'critical'
+                          WHEN operational_incidents.severity = 'critical' THEN 'critical'
+                          WHEN excluded.severity = 'high' THEN 'high' ELSE operational_incidents.severity END"""
+    ).bind(incident_id, fingerprint[:180], source[:80], severity, summary[:1000], timestamp, timestamp).run()
+    await db.prepare(
+        """INSERT INTO agent_tasks
+        (id, agent, objective, priority, related_opportunity_id, status, result_summary, created_at, updated_at)
+        VALUES (?, 'Incident Response Commander', ?, ?, '', 'queued', '', ?, ?)
+        ON CONFLICT(id) DO NOTHING"""
+    ).bind(task_id, f"Investigate and resolve operational incident {incident_id}: {summary[:500]}",
+           "urgent" if severity == "critical" else "high", timestamp, timestamp).run()
+    await write_audit(db, "operational.incident_detected", incident_id, f"{source}: {summary[:700]}")
+
+
+async def persist_runtime_exception(request: Request, error_id: str, exc: Exception):
+    env = get_env(request)
+    db = getattr(env, "DB", None) if env else None
+    if db is None:
+        return
+    error_type = type(exc).__name__
+    route = request.url.path[:180]
+    fingerprint = f"runtime:{request.method}:{route}:{error_type}"
+    try:
+        await record_operational_incident(
+            db, "runtime_exception", fingerprint,
+            f"{request.method} {route} raised {error_type} (error_id={error_id})",
+            "high",
+        )
+    except Exception as persist_error:
+        print("AURA_INCIDENT_PERSIST_FAILED", type(persist_error).__name__, str(persist_error)[:200])
 
 
 class OpportunityIn(BaseModel):
@@ -404,7 +451,7 @@ AGENT_CONSOLE = r"""<!doctype html>
 <section class="panel"><div class="grid"><h2>Task queue</h2><div style="text-align:right"><button id="refresh">Refresh</button></div></div><div class="scroll" id="tasks"></div></section>
 <section class="panel"><h2>Task preparation preview</h2><p class="hint">Menyiapkan konteks dan skill saja. Tidak memanggil model, internet, atau menjalankan aksi.</p><div id="preview" class="muted">Pilih Prepare pada task.</div></section>
 </div></main><script>
-const agents=["Agents Orchestrator","Business Strategist","Product Trend Researcher","Growth Hacker","Content Creator","TikTok Strategist","Instagram Curator","Video Optimization Specialist","SEO Specialist","Reddit Community Builder","Offer & Lead Gen Strategist","Outbound Strategist","Sales Outreach","Proposal Strategist","Finance Tracker","Analytics Reporter","Legal Compliance Checker","AI Engineer","DevOps Automator","Model QA Specialist"];
+const agents=["Agents Orchestrator","Business Strategist","Product Trend Researcher","Growth Hacker","Content Creator","TikTok Strategist","Instagram Curator","Video Optimization Specialist","SEO Specialist","Reddit Community Builder","Offer & Lead Gen Strategist","Outbound Strategist","Sales Outreach","Proposal Strategist","Finance Tracker","Analytics Reporter","Legal Compliance Checker","AI Engineer","DevOps Automator","Model QA Specialist","IT Service Manager","Site Reliability Engineer","Incident Response Commander","Test Automation Engineer"];
 let key=sessionStorage.getItem("aura_agent_key")||"";
 const el=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{"X-AURA-API-Key":key,"Content-Type":"application/json",...(opts.headers||{})}});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}if(!r.ok)throw Error(d.detail||r.statusText);return d}
@@ -687,7 +734,11 @@ AGENT_SKILLS = {
     "Legal Compliance Checker": ["market-intelligence","growth-content-commerce","finance-investment-risk","platform-engineering-security"],
     "AI Engineer": ["platform-engineering-security"],
     "DevOps Automator": ["platform-engineering-security"],
-    "Model QA Specialist": ["platform-engineering-security","market-intelligence","growth-content-commerce","finance-investment-risk"]
+    "Model QA Specialist": ["platform-engineering-security","market-intelligence","growth-content-commerce","finance-investment-risk"],
+    "IT Service Manager": ["platform-engineering-security"],
+    "Site Reliability Engineer": ["platform-engineering-security"],
+    "Incident Response Commander": ["platform-engineering-security"],
+    "Test Automation Engineer": ["platform-engineering-security"]
 }
 
 # Curated Agency Agents roles mapped into six AURA revenue divisions.
@@ -711,7 +762,11 @@ AGENT_OFFICE_PROFILES = {
     "Legal Compliance Checker": {"title": "Legal Compliance Checker", "division": "Operations & Finance", "zone": "operations", "archetype": "shield", "color": "#fb7185", "hair": "#492a2a", "tagline": "Reviews platform rules, disclosures, consumer claims, privacy, contracts and intellectual-property risks; can veto.", "upstream_path": "support/support-legal-compliance-checker.md", "specialty": "Reviews platform rules, disclosures, consumer claims, privacy, contracts and intellectual-property risks; can veto."},
     "AI Engineer": {"title": "AI Engineer", "division": "Technology & Automation", "zone": "engineering", "archetype": "tech", "color": "#818cf8", "hair": "#29294b", "tagline": "Designs model routing, agent workflows, tool boundaries, evaluations and safe automation architecture.", "upstream_path": "engineering/engineering-ai-engineer.md", "specialty": "Designs model routing, agent workflows, tool boundaries, evaluations and safe automation architecture."},
     "DevOps Automator": {"title": "DevOps Automator", "division": "Technology & Automation", "zone": "engineering", "archetype": "tech", "color": "#94a3b8", "hair": "#29384b", "tagline": "Maintains CI/CD, Cloudflare deployment, observability, reliability, backups and rollback procedures.", "upstream_path": "engineering/engineering-devops-automator.md", "specialty": "Maintains CI/CD, Cloudflare deployment, observability, reliability, backups and rollback procedures."},
-    "Model QA Specialist": {"title": "Model QA Specialist", "division": "Technology & Automation", "zone": "engineering", "archetype": "badge", "color": "#fbbf24", "hair": "#3b3521", "tagline": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently.", "upstream_path": "specialized/specialized-model-qa.md", "specialty": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently."}
+    "Model QA Specialist": {"title": "Model QA Specialist", "division": "Technology & Automation", "zone": "engineering", "archetype": "badge", "color": "#fbbf24", "hair": "#3b3521", "tagline": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently.", "upstream_path": "specialized/specialized-model-qa.md", "specialty": "Tests model outputs, instruction adherence, evidence quality, safety and regression behavior independently."},
+    "IT Service Manager": {"title": "IT Service Manager", "division": "Technology & Automation", "zone": "engineering", "archetype": "analyst", "color": "#38bdf8", "hair": "#18364b", "tagline": "Owns service health, incident queues, operational runbooks, access hygiene and continuity.", "upstream_path": "engineering/engineering-it-service-manager.md", "specialty": "Owns service health, incident queues, operational runbooks, access hygiene and continuity."},
+    "Site Reliability Engineer": {"title": "Site Reliability Engineer", "division": "Technology & Automation", "zone": "engineering", "archetype": "tech", "color": "#f87171", "hair": "#47252b", "tagline": "Monitors SLOs, error budgets, latency, availability and safe self-healing automation.", "upstream_path": "engineering/engineering-sre.md", "specialty": "Monitors SLOs, error budgets, latency, availability and safe self-healing automation."},
+    "Incident Response Commander": {"title": "Incident Response Commander", "division": "Technology & Automation", "zone": "engineering", "archetype": "captain", "color": "#fb923c", "hair": "#4b2c1d", "tagline": "Coordinates triage, containment, recovery, postmortems and incident follow-through.", "upstream_path": "engineering/engineering-incident-response-commander.md", "specialty": "Coordinates triage, containment, recovery, postmortems and incident follow-through."},
+    "Test Automation Engineer": {"title": "Test Automation Engineer", "division": "Technology & Automation", "zone": "engineering", "archetype": "badge", "color": "#4ade80", "hair": "#1e422e", "tagline": "Builds deterministic regression, integration and end-to-end tests to prevent repeat failures.", "upstream_path": "testing/testing-test-automation-engineer.md", "specialty": "Builds deterministic regression, integration and end-to-end tests to prevent repeat failures."}
 }
 
 
@@ -1361,6 +1416,19 @@ async def virtual_office_state(request: Request, db=Depends(get_db)):
         FROM audit_log ORDER BY created_at DESC LIMIT 60"""
     ).all()
     logs = d1_rows(log_result)
+    incident_result = await db.prepare(
+        """SELECT id, source, severity, summary, status, occurrence_count, first_seen_at, last_seen_at
+        FROM operational_incidents WHERE status IN ('open','investigating')
+        ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        last_seen_at DESC LIMIT 20"""
+    ).all()
+    open_incidents = d1_rows(incident_result)
+    heartbeat_result = await db.prepare(
+        """SELECT scheduled_at, queued_tasks, in_progress_tasks, blocked_tasks, recovered_leases
+        FROM operational_heartbeats ORDER BY scheduled_at DESC LIMIT 1"""
+    ).all()
+    heartbeat_rows = d1_rows(heartbeat_result)
+    latest_heartbeat = heartbeat_rows[0] if heartbeat_rows else None
     jakarta_tz = timezone(timedelta(hours=7))
     today_jakarta = datetime.now(timezone.utc).astimezone(jakarta_tz).date()
     completed_today = 0
@@ -1394,6 +1462,15 @@ async def virtual_office_state(request: Request, db=Depends(get_db)):
             "provider": provider_adapter_status(get_env(request)),
             "background_scheduler_enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED"),
             "live_financial_execution_enabled": False,
+            "operational_monitor": {
+                "enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED"),
+                "mode": "observe_and_safe_recover",
+                "latest_heartbeat": latest_heartbeat,
+                "open_incidents": len(open_incidents),
+                "incident_queue": open_incidents,
+                "automatic_model_repairs": False,
+                "note": "Cron monitor records incidents and reclaims expired task leases. It does not invoke AI models or perform code edits.",
+            },
             "note": "Provider readiness is configuration-only; no live inference or quota test is performed by this status endpoint. A character is marked working only while its D1 task has a valid, unexpired worker lease.",
         },
     }
@@ -2088,8 +2165,9 @@ async def audit_entries(db=Depends(get_db)):
     return d1_rows(result)
 
 
-# Cloudflare Cron entrypoint. The trigger is provisioned, but execution remains
-# opt-in until an owner-approved worker policy and model adapter are configured.
+# Cloudflare Cron entrypoint: bounded, no-model operational monitoring.
+# This monitor only reads D1, reclaims expired task leases, records incidents and
+# creates internal IT tasks. It never calls a model, external API or paid service.
 @handler
 async def on_scheduled(event, env, ctx):
     scheduler_enabled = str(getattr(env, "AURA_SCHEDULER_ENABLED", "false")).lower() == "true"
@@ -2100,15 +2178,80 @@ async def on_scheduled(event, env, ctx):
             "cron": getattr(event, "cron", None),
         }))
         return
-    # Safe bootstrap mode: do not claim tasks or call a model. A later runtime
-    # activation must add bounded dispatch, retries and per-task spend controls.
-    print("AURA_SCHEDULER_READY", json.dumps({
-        "mode": "observe_only",
-        "task_dispatch_enabled": False,
-        "model_provider_enabled": False,
-        "scheduled_time": getattr(event, "scheduledTime", None),
-        "cron": getattr(event, "cron", None),
-    }))
+    db = getattr(env, "DB", None) if env else None
+    if db is None:
+        print("AURA_MONITOR_FAILED", json.dumps({"reason": "D1 binding unavailable"}))
+        return
+    timestamp = now_iso()
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    orphan_cutoff = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat()
+    try:
+        expired = await db.prepare(
+            """SELECT t.id FROM agent_tasks t
+            LEFT JOIN task_execution_leases l ON l.task_id = t.id
+            WHERE t.status = 'in_progress'
+              AND ((l.task_id IS NOT NULL AND l.expires_at <= ?)
+                   OR (l.task_id IS NULL AND t.updated_at <= ?))
+            LIMIT 50"""
+        ).bind(now_epoch, orphan_cutoff).all()
+        expired_rows = d1_rows(expired)
+        if expired_rows:
+            await db.prepare(
+                """UPDATE agent_tasks SET status = 'queued', updated_at = ?
+                WHERE status = 'in_progress' AND (
+                  EXISTS (SELECT 1 FROM task_execution_leases l
+                          WHERE l.task_id = agent_tasks.id AND l.expires_at <= ?)
+                  OR (updated_at <= ? AND NOT EXISTS (
+                      SELECT 1 FROM task_execution_leases l WHERE l.task_id = agent_tasks.id))
+                )"""
+            ).bind(timestamp, now_epoch, orphan_cutoff).run()
+            await db.prepare("DELETE FROM task_execution_leases WHERE expires_at <= ?").bind(now_epoch).run()
+            await record_operational_incident(
+                db, "lease_recovery", f"lease-recovery:{timestamp[:13]}",
+                f"Automatically reclaimed {len(expired_rows)} expired or orphaned task lease(s)",
+                "medium",
+            )
+        counts_result = await db.prepare(
+            """SELECT
+              SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+              SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+              SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked
+            FROM agent_tasks"""
+        ).first()
+        counts = {
+            "queued": int(getattr(counts_result, "queued", 0) or 0),
+            "in_progress": int(getattr(counts_result, "in_progress", 0) or 0),
+            "blocked": int(getattr(counts_result, "blocked", 0) or 0),
+        }
+        await db.prepare(
+            """INSERT INTO operational_heartbeats
+            (id, scheduled_at, queued_tasks, in_progress_tasks, blocked_tasks, recovered_leases)
+            VALUES (?, ?, ?, ?, ?, ?)"""
+        ).bind(uuid4().hex, timestamp, counts["queued"], counts["in_progress"],
+               counts["blocked"], len(expired_rows)).run()
+        await write_audit(
+            db, "operational.monitor_completed", "scheduled-monitor",
+            json.dumps({**counts, "recovered_leases": len(expired_rows)}, sort_keys=True),
+        )
+        print("AURA_MONITOR_OK", json.dumps({
+            "mode": "observe_and_safe_recover",
+            "task_dispatch_enabled": False,
+            "model_provider_enabled": False,
+            "counts": counts,
+            "recovered_leases": len(expired_rows),
+            "scheduled_time": getattr(event, "scheduledTime", None),
+            "cron": getattr(event, "cron", None),
+        }))
+    except Exception as exc:
+        print("AURA_MONITOR_FAILED", type(exc).__name__, str(exc)[:500])
+        try:
+            await record_operational_incident(
+                db, "scheduled_monitor", f"monitor:{type(exc).__name__}",
+                f"Scheduled operational monitor failed: {type(exc).__name__}: {str(exc)[:400]}",
+                "critical",
+            )
+        except Exception:
+            pass
 
 
 # Use Cloudflare's official ASGI entrypoint. The adapter injects Worker bindings

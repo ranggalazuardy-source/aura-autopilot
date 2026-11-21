@@ -1,0 +1,71 @@
+name: AURA autonomous CI incident intake
+
+on:
+  workflow_run:
+    workflows:
+      - AURA quality checks
+      - Deploy AURA to Cloudflare
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+jobs:
+  retry-transient-quality-failure:
+    if: ${{ github.event.workflow_run.name == 'AURA quality checks' && github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retry failed quality jobs once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh api --method POST repos/$GH_REPO/actions/runs/$RUN_ID/rerun-failed-jobs
+
+  open-operational-incident:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && (github.event.workflow_run.name == 'Deploy AURA to Cloudflare' || github.event.workflow_run.run_attempt >= 2) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or reuse an incident ticket
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE="[AURA CI incident #${RUN_ID}] ${RUN_NAME} failed"
+          EXISTING="$(gh issue list --repo "$GH_REPO" --state open --search "\"AURA CI incident #${RUN_ID}\" in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$EXISTING" ]]; then
+            echo "Incident already tracked in issue #$EXISTING"
+            exit 0
+          fi
+          BODY="$(cat <<EOF
+          ## Automated operational incident
+
+          AURA's CI/deployment workflow failed after the permitted retry policy. This ticket was created automatically by the repository incident intake workflow.
+
+          - Workflow: $RUN_NAME
+          - Run: $RUN_URL
+          - Branch: $HEAD_BRANCH
+          - Commit: $HEAD_SHA
+          - Conclusion: $CONCLUSION
+
+          ## Required response
+          1. Inspect the failing job and logs.
+          2. Reproduce the failure with a deterministic test.
+          3. Apply the smallest reversible fix and add regression coverage.
+          4. Run the full quality workflow.
+          5. Verify deployment only after all checks pass.
+
+          **Safety:** Do not enable paid providers, purchase services, change billing, expose secrets, or perform destructive data operations. Escalate those actions for owner approval.
+          EOF
+          )"
+          gh issue create --repo "$GH_REPO" --title "$TITLE" --body "$BODY"

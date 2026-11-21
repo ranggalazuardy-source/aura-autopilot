@@ -56,11 +56,11 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertEqual(namespace["d1_rows"](Result(None)), [])
 
 
-    def test_scheduler_is_registered_but_disabled_by_default(self):
+    def test_scheduler_is_registered_for_no_cost_operational_monitoring(self):
         self.assertIn("from workers import asgi, handler", SOURCE)
         self.assertIn("@handler", SOURCE)
         self.assertIn("async def on_scheduled(event, env, ctx):", SOURCE)
-        self.assertIn('"AURA_SCHEDULER_ENABLED": "false"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+        self.assertIn('"AURA_SCHEDULER_ENABLED": "true"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         import json
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
         self.assertEqual(config["triggers"]["crons"], ["*/15 * * * *"])
@@ -130,6 +130,23 @@ class CloudflareWorkerEntrypointTests(unittest.TestCase):
         self.assertIn('ProviderStatus provider={data?.runtime?.provider}', (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8"))
         self.assertIn("configuration-only", SOURCE)
         self.assertIn("does not send test requests", (ROOT / "virtual-office" / "src" / "App.jsx").read_text(encoding="utf-8"))
+
+
+    def test_scheduled_monitor_is_no_cost_and_never_runs_models(self):
+        self.assertIn('async def on_scheduled(event, env, ctx):', SOURCE)
+        self.assertIn('AURA_SCHEDULER_ENABLED', SOURCE)
+        self.assertIn('AURA_MONITOR_OK', SOURCE)
+        self.assertIn('model_provider_enabled": False', SOURCE)
+        self.assertIn('task_dispatch_enabled": False', SOURCE)
+        self.assertIn('operational_heartbeats', SOURCE)
+        self.assertIn('operational_incidents', (ROOT / "cloudflare" / "schema.sql").read_text(encoding="utf-8"))
+        self.assertIn('"AURA_SCHEDULER_ENABLED": "true"', (ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
+
+    def test_runtime_exceptions_are_recorded_as_incidents_for_it(self):
+        self.assertIn('await persist_runtime_exception(request, error_id, exc)', SOURCE)
+        self.assertIn('"Incident Response Commander"', SOURCE)
+        self.assertIn('operational.incident_detected', SOURCE)
+        self.assertIn('ON CONFLICT(id) DO NOTHING', SOURCE)
 
     def test_worker_runtime_dependencies_are_pinned(self):
         import tomllib

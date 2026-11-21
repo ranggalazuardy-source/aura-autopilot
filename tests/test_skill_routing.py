@@ -25,7 +25,7 @@ class SkillRoutingTests(unittest.TestCase):
     def test_all_agent_bindings_reference_known_skill_packs(self):
         packs = self.assignments["SKILL_PACKS"]
         bindings = self.assignments["AGENT_SKILLS"]
-        self.assertEqual(len(bindings), 20)
+        self.assertEqual(len(bindings), 24)
         for agent, pack_ids in bindings.items():
             with self.subTest(agent=agent):
                 self.assertTrue(pack_ids)
@@ -175,7 +175,7 @@ class SkillRoutingTests(unittest.TestCase):
                     if isinstance(target, ast.Name) and target.id == "AGENT_OFFICE_PROFILES":
                         profiles = ast.literal_eval(node.value)
         self.assertEqual(set(profiles), set(self.assignments["AGENT_SKILLS"]))
-        self.assertEqual(len(profiles), 20)
+        self.assertEqual(len(profiles), 24)
         self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "marketing", "sales", "operations", "engineering"})
 
     def test_virtual_office_state_uses_live_tasks_leases_and_audit_logs(self):
@@ -188,7 +188,7 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn('"background_scheduler_enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED")', self.source)
         self.assertIn('"model_provider_enabled": _truthy_env(get_env(request), "AURA_MODEL_ENABLED")', self.source)
         config = json.loads((ROOT / "wrangler.jsonc").read_text(encoding="utf-8"))
-        self.assertEqual(config["vars"]["AURA_SCHEDULER_ENABLED"], "false")
+        self.assertEqual(config["vars"]["AURA_SCHEDULER_ENABLED"], "true")
         self.assertEqual(config["vars"]["AURA_MODEL_ENABLED"], "false")
 
     def test_virtual_office_frontend_uses_react_three_fiber_and_live_api(self):

@@ -245,3 +245,29 @@ CREATE TABLE IF NOT EXISTS model_execution_claims (
     created_at TEXT NOT NULL,
     FOREIGN KEY(task_id) REFERENCES agent_tasks(id) ON DELETE CASCADE
 );
+
+
+-- Continuous IT operations: deduplicated incident queue and scheduler heartbeat.
+CREATE TABLE IF NOT EXISTS operational_incidents (
+    id TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL UNIQUE,
+    source TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK(severity IN ('low','medium','high','critical')),
+    summary TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','investigating','resolved','ignored')),
+    occurrence_count INTEGER NOT NULL DEFAULT 1 CHECK(occurrence_count >= 1),
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_operational_incidents_status ON operational_incidents(status, last_seen_at);
+
+CREATE TABLE IF NOT EXISTS operational_heartbeats (
+    id TEXT PRIMARY KEY,
+    scheduled_at TEXT NOT NULL,
+    queued_tasks INTEGER NOT NULL DEFAULT 0 CHECK(queued_tasks >= 0),
+    in_progress_tasks INTEGER NOT NULL DEFAULT 0 CHECK(in_progress_tasks >= 0),
+    blocked_tasks INTEGER NOT NULL DEFAULT 0 CHECK(blocked_tasks >= 0),
+    recovered_leases INTEGER NOT NULL DEFAULT 0 CHECK(recovered_leases >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_operational_heartbeats_scheduled ON operational_heartbeats(scheduled_at);
