@@ -22,6 +22,7 @@ from app.services.patch_approval_issuer import issue_patch_approval_receipt
 from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch, dispatch_next_execution_request
 from app.services.patch_approval_store import D1PatchApprovalStore
 from app.patch_executor import PatchApproval
+from app.repair_planner import build_repair_plan
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -289,6 +290,12 @@ class CIIncidentIntakeIn(BaseModel):
     head_sha: str = Field(pattern="^[0-9a-f]{40}$")
     conclusion: str = Field(pattern="^failure$")
     failed_jobs: list[str] = Field(default_factory=list, max_length=20)
+
+
+class RepairIncidentTriageIn(BaseModel):
+    category: str = Field(pattern="^(automated_test_regression|python_syntax_or_import|dependency_or_security_audit|database_schema|cloudflare_deployment_or_config|container_or_runtime|unknown_or_unclassified)$")
+    candidate_paths: list[str] = Field(default_factory=list, max_length=6)
+    confirm_owner_triage: StrictBool
 
 
 class OpportunityScoreIn(BaseModel):
@@ -2347,6 +2354,63 @@ async def list_repair_incidents(db=Depends(get_db)):
            ORDER BY i.last_seen_at DESC LIMIT 50"""
     ).all()
     return d1_rows(result)
+
+
+@app.post("/repair/incidents/{incident_id}/triage", dependencies=[Depends(require_api_key)])
+async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriageIn, db=Depends(get_db)):
+    """Record an explicit owner triage decision; never generates or executes a patch."""
+    if not re.fullmatch(r"[0-9a-f]{24}", incident_id):
+        raise HTTPException(404, "Incident not found")
+    if payload.confirm_owner_triage is not True:
+        raise HTTPException(400, "Explicit owner triage confirmation is required")
+    row = await db.prepare(
+        """SELECT id FROM operational_incidents
+           WHERE id = ? AND source = 'github_actions' AND status IN ('open','investigating')"""
+    ).bind(incident_id).first()
+    if not row:
+        raise HTTPException(404, "Open CI incident not found")
+    safe_categories = {"automated_test_regression", "python_syntax_or_import"}
+    paths = payload.candidate_paths
+    if len(paths) != len(set(paths)):
+        raise HTTPException(422, "Candidate paths must be unique")
+    if any(not isinstance(path, str) or not path or len(path) > 240 or "\x00" in path for path in paths):
+        raise HTTPException(422, "Candidate paths contain invalid values")
+    if payload.category in safe_categories:
+        plan = build_repair_plan(incident_id, payload.category, paths)
+        if plan.status != "ready_for_owner_approval":
+            raise HTTPException(422, {"detail": "Candidate paths are not eligible", "reasons": list(plan.reasons)})
+    else:
+        if paths:
+            raise HTTPException(422, "High-risk or unclassified incidents cannot carry repair candidate paths")
+        plan = build_repair_plan(incident_id, payload.category, ())
+    paths_json = json.dumps(list(plan.candidate_paths), separators=(",", ":"))
+    await db.prepare(
+        """UPDATE operational_incident_evidence
+           SET triage_category = ?, candidate_paths_json = ?
+           WHERE incident_id = ?"""
+    ).bind(payload.category, paths_json, incident_id).run()
+    await db.prepare(
+        """UPDATE operational_incidents
+           SET status = 'investigating', last_seen_at = ?
+           WHERE id = ?"""
+    ).bind(now_iso(), incident_id).run()
+    await write_audit(
+        db, "operational.incident_triaged", incident_id,
+        f"category={payload.category}; candidate_paths={len(plan.candidate_paths)}; plan={plan.status}",
+    )
+    return {
+        "incident_id": incident_id,
+        "triage_category": payload.category,
+        "candidate_paths": list(plan.candidate_paths),
+        "repair_eligible": plan.status == "ready_for_owner_approval",
+        "plan_status": plan.status,
+        "reasons": list(plan.reasons),
+        "requires_owner_approval": True,
+        "patch_generated": False,
+        "files_written": False,
+        "merged": False,
+        "deployed": False,
+    }
 
 
 @app.post("/repair/runner/next")
