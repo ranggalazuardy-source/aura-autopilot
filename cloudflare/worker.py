@@ -25,6 +25,7 @@ from app.patch_executor import PatchApproval
 from app.repair_planner import build_repair_plan
 from app.services.async_d1_triaged_ci_repair import prepare_triaged_ci_repair_from_d1_async
 from app.services.async_model_patch_generator import AsyncBoundedModelPatchGenerator
+from app.repair_dashboard import REPAIR_DASHBOARD
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -408,7 +409,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;p
 <label>API key</label><input id="key" type="password" autocomplete="off" placeholder="Masukkan AURA_API_KEY">
 <button class="primary" onclick="connect()">Connect</button><p class="hint">Key hanya disimpan di session browser ini, bukan di repository.</p><div id="loginmsg" class="hint"></div></div>
 <div id="app" class="hidden">
-<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><a class="tab" href="/office/">3D Virtual Office ↗</a><a class="tab" href="/agents">Agent Console ↗</a><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
+<div class="top"><div><h1>AURA <span class="status">GUARDED</span></h1><div class="muted">Autonomous Unified Revenue Agent · <span id="stamp">—</span></div></div><div class="actions"><a class="tab" href="/office/">3D Virtual Office ↗</a><a class="tab" href="/agents">Agent Console ↗</a><a class="tab" href="/it">IT & AI Engineering ↗</a><button onclick="refresh()">Refresh</button><button onclick="logout()">Lock</button></div></div>
 <div class="grid">
 <div class="metric"><span class="muted">Confirmed income</span><strong id="income">Rp0</strong></div>
 <div class="metric"><span class="muted">Recorded expenses</span><strong id="expense">Rp0</strong></div>
@@ -536,6 +537,11 @@ async def root():
 <style>body{font:16px system-ui;background:#10131c;color:#f4f2ed;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:720px;padding:40px}a{display:inline-block;margin:10px 12px 0 0;padding:14px 20px;border:1px solid #777;border-radius:12px;color:#fff;text-decoration:none}p{color:#b8bdc9}</style></head>
 <body><main><h1>AURA</h1><p>Autonomous Unified Revenue Agent · guarded multi-agent operations</p>
 <a href="/dashboard">Operations Dashboard</a><a href="/office/">Virtual AI Office</a></main></body></html>""")
+
+@app.get("/it", response_class=HTMLResponse, include_in_schema=False)
+async def it_repair_console():
+    return HTMLResponse(REPAIR_DASHBOARD)
+
 
 @app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard():
@@ -2581,6 +2587,25 @@ async def generate_ci_repair_proposal(
         "merged": False,
         "deployed": False,
     }
+
+
+@app.get("/repair/proposals", dependencies=[Depends(require_api_key)])
+async def list_repair_proposals(db=Depends(get_db)):
+    """Owner-only metadata list; exact patch bytes are fetched individually for review."""
+    result = await db.prepare(
+        """SELECT id AS proposal_id, incident_id, base_sha, patch_sha256,
+                  approved_paths_json, status, expires_at, created_at
+           FROM repair_patch_proposals
+           ORDER BY created_at DESC LIMIT 50"""
+    ).all()
+    rows = d1_rows(result)
+    for row in rows:
+        if isinstance(row, dict):
+            try:
+                row["approved_paths"] = json.loads(row.pop("approved_paths_json") or "[]")
+            except (TypeError, ValueError):
+                row["approved_paths"] = []
+    return rows
 
 
 @app.get("/repair/proposals/{proposal_id}", dependencies=[Depends(require_api_key)])
