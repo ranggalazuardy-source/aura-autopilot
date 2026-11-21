@@ -1,0 +1,159 @@
+name: AURA guarded repair runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Opaque D1 execution request ID
+        required: true
+        type: string
+      base_sha:
+        description: Exact base commit SHA bound to the request
+        required: true
+        type: string
+      expires_at:
+        description: Unix expiry timestamp from the queued request
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aura-repair-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Validate dispatch envelope
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          EXPIRES_AT: ${{ inputs.expires_at }}
+        run: |
+          python - <<'PY'
+          import os, re, time
+          rid, sha, expiry = os.environ["REQUEST_ID"], os.environ["BASE_SHA"], os.environ["EXPIRES_AT"]
+          assert re.fullmatch(r"[0-9a-f]{32}", rid), "invalid request id"
+          assert re.fullmatch(r"[0-9a-f]{40}", sha), "invalid base SHA"
+          assert expiry.isdigit() and int(expiry) > int(time.time()), "expired dispatch"
+          assert int(expiry) - int(time.time()) <= 600, "dispatch TTL exceeded"
+          PY
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.base_sha }}
+          persist-credentials: false
+      - name: Retrieve one-time patch using dedicated runner credential
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          RUNNER_SECRET: ${{ secrets.AURA_REPAIR_RUNNER_SECRET }}
+          API_BASE: ${{ vars.AURA_API_BASE_URL }}
+        run: |
+          test -n "$RUNNER_SECRET" || { echo "::error::AURA_REPAIR_RUNNER_SECRET is not configured"; exit 1; }
+          test -n "$API_BASE" || { echo "::error::AURA_API_BASE_URL is not configured"; exit 1; }
+          curl --fail --silent --show-error \
+            -H "X-AURA-Runner-Key: $RUNNER_SECRET" \
+            "$API_BASE/repair/runner/$REQUEST_ID/patch" -o /tmp/repair-response.json
+          python - <<'PY'
+          import json, os, pathlib, hashlib
+          payload = json.loads(pathlib.Path("/tmp/repair-response.json").read_text())
+          assert payload["request_id"] == os.environ["REQUEST_ID"]
+          assert payload["base_sha"] == "${{ inputs.base_sha }}"
+          patch = payload["patch_text"]
+          digest = hashlib.sha256(patch.encode()).hexdigest()
+          assert digest == payload["patch_sha256"]
+          pathlib.Path("/tmp/repair.patch").write_text(patch)
+          pathlib.Path("/tmp/repair-meta.json").write_text(json.dumps({
+              "request_id": payload["request_id"], "base_sha": payload["base_sha"],
+              "patch_sha256": digest, "approved_paths": payload["approved_paths"],
+              "incident_id": payload["incident_id"], "approval_receipt_id": payload["approval_receipt_id"]
+          }))
+          PY
+      - name: Apply patch to isolated checkout
+        run: git apply --check /tmp/repair.patch && git apply /tmp/repair.patch
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install test dependencies
+        run: uv sync --all-groups
+      - name: Run quality checks before any write credential exists
+        run: |
+          uv run python -m compileall -q app cloudflare
+          uv run python -m unittest discover -s tests -v
+      - name: Verify exact changed paths and patch digest
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, hashlib
+          meta = json.loads(pathlib.Path("/tmp/repair-meta.json").read_text())
+          changed = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True).splitlines()
+          assert sorted(changed) == sorted(meta["approved_paths"]), "changed paths differ from owner approval"
+          assert hashlib.sha256(pathlib.Path("/tmp/repair.patch").read_bytes()).hexdigest() == meta["patch_sha256"]
+          PY
+      - uses: actions/upload-artifact@v6
+        with:
+          name: aura-repair-patch
+          path: |
+            /tmp/repair.patch
+            /tmp/repair-meta.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-draft-pr:
+    needs: validate-patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Mint narrowly scoped GitHub App token after quality PASS
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AURA_REPAIR_APP_ID }}
+          private-key: ${{ secrets.AURA_REPAIR_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.base_sha }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          name: aura-repair-patch
+          path: /tmp/aura-repair
+      - name: Re-verify patch and create isolated repair branch
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          python - <<'PY'
+          import json, pathlib, os, hashlib
+          meta=json.loads(pathlib.Path("/tmp/aura-repair/repair-meta.json").read_text())
+          patch=pathlib.Path("/tmp/aura-repair/repair.patch").read_bytes()
+          assert meta["request_id"] == os.environ["REQUEST_ID"]
+          assert meta["base_sha"] == os.environ["BASE_SHA"]
+          assert hashlib.sha256(patch).hexdigest() == meta["patch_sha256"]
+          PY
+          git apply --check /tmp/aura-repair/repair.patch
+          git apply /tmp/aura-repair/repair.patch
+          git config user.name "aura-repair[bot]"
+          git config user.email "aura-repair[bot]@users.noreply.github.com"
+          git switch -c "aura/repair/$REQUEST_ID"
+          git add --all
+          git commit -m "fix: guarded automated repair $REQUEST_ID"
+          git push --set-upstream origin "aura/repair/$REQUEST_ID"
+          gh pr create --draft --base main --head "aura/repair/$REQUEST_ID" \
+            --title "Guarded automated repair $REQUEST_ID" \
+            --body "Automated repair proposal generated by AURA.\n\n- Exact base: $BASE_SHA\n- Request: $REQUEST_ID\n- Quality checks passed in the isolated read-only job.\n- Owner review is required. No merge or deployment is performed."
