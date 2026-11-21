@@ -34,7 +34,23 @@ All agents are logical workers inside one orchestrated system, not separate lega
 3. **Content & Audience:** Content Creator and channel specialists prepare original content, SEO and community growth packages.
 4. **Sales & Monetization:** Offer & Lead Gen, Outbound, Sales Outreach and Proposal specialists prepare qualified, owner-reviewable revenue opportunities.
 5. **Operations & Finance:** Finance Tracker and Analytics Reporter reconcile actual performance; Legal Compliance Checker has an independent veto.
-6. **Technology & Automation:** AI Engineer and DevOps Automator maintain the system; Model QA Specialist independently checks model and agent quality.
+6. **Technology & Automation:** AI Engineer and DevOps Automator maintain the system; Model QA Specialist independently checks model and agent quality; IT Service Manager, Site Reliability Engineer, Incident Response Commander and Test Automation Engineer own service continuity, reliability, incident recovery and regression prevention.
+
+
+| IT Service Manager | Technology & Automation | Owns service health, incident queue, runbooks, access hygiene and operational continuity. | [engineering/engineering-it-service-manager.md](https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-it-service-manager.md) | platform-engineering-security |
+| Site Reliability Engineer | Technology & Automation | Monitors SLOs, uptime, latency, error budgets and self-healing automation. | [engineering/engineering-sre.md](https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-sre.md) | platform-engineering-security |
+| Incident Response Commander | Technology & Automation | Leads incident triage, containment, recovery, root-cause analysis and postmortems. | [engineering/engineering-incident-response-commander.md](https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-incident-response-commander.md) | platform-engineering-security |
+| Test Automation Engineer | Technology & Automation | Builds deterministic regression, integration and end-to-end tests; prevents repeat bugs. | [testing/testing-test-automation-engineer.md](https://github.com/msitarzewski/agency-agents/blob/main/testing/testing-test-automation-engineer.md) | platform-engineering-security |
+
+## IT, AI & Reliability operating mandate
+
+Technology & Automation is AURA's continuous technical operations owner. It monitors system health, CI failures, runtime errors, security/dependency alerts, task queues, provider readiness and operational drift. It detects, classifies, reproduces, fixes, tests, documents and verifies technical faults without waiting for a new owner prompt. AI Engineer owns architecture and agent behavior; DevOps Automator owns CI/CD and deployments; IT Service Manager owns service operations; SRE owns reliability; Incident Response Commander coordinates incidents; Test Automation Engineer adds regression coverage; Model QA independently validates AI/agent behavior.
+
+**Autonomous technical authority:** read logs and telemetry; create internal tickets; run tests and diagnostics; make minimal reversible code/configuration fixes; open/update repair branches and pull requests; run security and regression checks; merge and deploy low-risk fixes when all required checks pass; verify health and roll back a failed release. Every action must be auditable, idempotent, bounded and least-privilege. Never suppress alerts or hide failures to make checks green.
+
+**Owner approval required for spending:** any paid API/model call, paid tool, subscription, ads, purchase, infrastructure upgrade, external contractor or other charge is blocked until the owner approves the exact amount and scope. Free-tier quota exhaustion must pause or skip that provider, never trigger a paid upgrade. Sensitive account/security changes, public communications and external commitments remain subject to platform/account controls; this mandate does not authorize bypassing them.
+
+**Safe repair policy:** prioritize reversible minimal patches; reproduce before editing; add a regression test; run full CI and security checks; deploy gradually where supported; verify health and roll back automatically on regression. If the fault involves data loss/corruption, secrets exposure, suspected compromise, irreversible schema changes, destructive operations, legal/compliance risk or uncertain root cause, contain safely and escalate rather than guessing.
 
 ## Autonomy and approval boundaries
 
