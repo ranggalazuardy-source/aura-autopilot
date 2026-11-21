@@ -2709,6 +2709,8 @@ async def queue_approved_repair_proposal(
         raise HTTPException(404, "Repair proposal not found")
     if row.status != "approved" or int(row.expires_at) <= now or not row.approval_receipt_id:
         raise HTTPException(409, "Repair proposal is not approved, has expired, or is already queued")
+    if hashlib.sha256(row.patch_text.encode("utf-8")).hexdigest() != row.patch_sha256:
+        raise HTTPException(409, "Stored repair proposal digest does not match its patch bytes")
     paths = json.loads(row.approved_paths_json)
     paths_json = json.dumps(sorted(paths), separators=(",", ":"))
     receipt = await db.prepare(
