@@ -5,6 +5,7 @@ from app.patch_executor import PatchApproval
 from app.patch_policy import ChangedFile
 from app.services.repair_pipeline import (
     build_execution_request,
+    execute_repair_proposal,
     prepare_repair_proposal,
 )
 
@@ -145,6 +146,22 @@ class RepairPipelineTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "digest changed"):
             build_execution_request(tampered, self.approval_for(proposal))
+
+    async def test_invalid_proposal_blocks_before_d1_or_workspace(self):
+        blocked = prepare_repair_proposal(
+            self.incident(category="database_schema"), base_sha=BASE, generator=FakeGenerator()
+        )
+
+        class NoTouch:
+            def __getattr__(self, name):
+                raise AssertionError("D1/workspace must not be touched")
+
+        result = await execute_repair_proposal(
+            blocked, self.approval_for(self.proposal()),
+            db=NoTouch(), workspace=NoTouch(),
+        )
+        self.assertEqual(result.status, "blocked")
+        self.assertIn("proposal_or_approval_binding_invalid", result.reasons)
 
     def test_blocked_proposal_cannot_be_converted(self):
         blocked = prepare_repair_proposal(
