@@ -2347,7 +2347,7 @@ async def list_repair_incidents(db=Depends(get_db)):
                   i.occurrence_count, i.first_seen_at, i.last_seen_at,
                   e.workflow_name, e.workflow_run_id, e.run_attempt, e.run_url,
                   e.head_branch, e.head_sha, e.failed_jobs_json,
-                  e.triage_category, e.candidate_paths_json
+                  e.triage_category, e.candidate_paths_json, e.triage_owner
            FROM operational_incidents i
            LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
            WHERE i.source = 'github_actions'
@@ -2386,9 +2386,11 @@ async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriage
     paths_json = json.dumps(list(plan.candidate_paths), separators=(",", ":"))
     await db.prepare(
         """UPDATE operational_incident_evidence
-           SET triage_category = ?, candidate_paths_json = ?
+           SET triage_category = ?, candidate_paths_json = ?, triage_owner = ?
            WHERE incident_id = ?"""
-    ).bind(payload.category, paths_json, incident_id).run()
+    ).bind(payload.category, paths_json,
+           "IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander",
+           incident_id).run()
     await db.prepare(
         """UPDATE operational_incidents
            SET status = 'investigating', last_seen_at = ?
@@ -2402,6 +2404,7 @@ async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriage
         "incident_id": incident_id,
         "triage_category": payload.category,
         "candidate_paths": list(plan.candidate_paths),
+        "owner": "IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander",
         "repair_eligible": plan.status == "ready_for_owner_approval",
         "plan_status": plan.status,
         "reasons": list(plan.reasons),
