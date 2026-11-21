@@ -49,6 +49,13 @@ class BootstrapAgentRegistryCompatibilityTests(unittest.TestCase):
         source = ast.unparse(function)
         self.assertIn("AGENT_ALIASES.get(agent, agent)", source)
         self.assertIn("AGENT_SKILLS.get(canonical_agent)", source)
+        context_function = next(
+            node for node in TREE.body
+            if isinstance(node, ast.FunctionDef) and node.name == "assemble_agent_context"
+        )
+        context_source = ast.unparse(context_function)
+        self.assertIn("AGENT_ALIASES.get(agent, agent)", context_source)
+        self.assertIn("AGENT_OFFICE_PROFILES.get(canonical_agent, {})", context_source)
 
 
 if __name__ == "__main__":
