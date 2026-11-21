@@ -1,10 +1,10 @@
 """Static security contract tests for the guarded repair runner workflow.
 
-These tests intentionally inspect the checked-in workflow rather than relying
-only on route unit tests. They keep repository write credentials out of the
-untrusted patch-validation job and preserve the owner-approval gate.
+These tests inspect the checked-in workflow and preserve the boundary between
+untrusted patch validation and the later, owner-authorized repository write.
 """
 from pathlib import Path
+import re
 import unittest
 
 
@@ -19,8 +19,9 @@ class GuardedRepairWorkflowContractTests(unittest.TestCase):
         marker = f"  {name}:\n"
         self.assertIn(marker, WORKFLOW)
         start = WORKFLOW.index(marker) + len(marker)
-        next_job = WORKFLOW.find("\n  ", start)
-        return WORKFLOW[start:] if next_job < 0 else WORKFLOW[start:next_job]
+        next_job = re.search(r"\n  [a-z][a-z0-9-]*:\n", WORKFLOW[start:])
+        end = start + next_job.start() if next_job else len(WORKFLOW)
+        return WORKFLOW[start:end]
 
     def test_runner_is_disabled_until_owner_enables_it(self):
         self.assertIn("if: vars.AURA_REPAIR_RUNNER_ENABLED == 'true'", self.job("acquire-request"))
