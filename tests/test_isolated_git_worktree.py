@@ -68,11 +68,22 @@ class IsolatedGitWorktreeTests(unittest.TestCase):
         self.assertTrue(path.exists())
         self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), "old\n")
 
-    def test_cleanup_removes_only_temporary_worktree(self):
-        path = self.workspace.create("aura/repair/cleanup", self.base)
+    def test_cleanup_removes_temporary_worktree_and_repair_branch_only(self):
+        branch = "aura/repair/cleanup"
+        path = self.workspace.create(branch, self.base)
         self.workspace.cleanup()
         self.assertFalse(path.exists())
         self.assertEqual((self.repo / "app/services/sample.py").read_text(encoding="utf-8"), "VALUE = 1\n")
+        branches = subprocess.run(
+            ["git", "branch", "--list", branch], cwd=self.repo,
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(branches, "")
+        main = subprocess.run(
+            ["git", "branch", "--show-current"], cwd=self.repo,
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(main, "main")
 
 
 if __name__ == "__main__":
