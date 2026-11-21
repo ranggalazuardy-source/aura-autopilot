@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field, StrictBool
 from workers import asgi, handler
 from app.services.patch_approval_issuer import issue_patch_approval_receipt
 from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch
+from app.services.patch_approval_store import D1PatchApprovalStore
+from app.patch_executor import PatchApproval
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -2271,6 +2273,50 @@ async def fetch_repair_patch(request_id: str, request: Request, db=Depends(get_d
     await write_audit(db, "patch_execution.patch_claimed", request_id,
                       f"incident={claimed['incident_id']}; base={claimed['base_sha']}")
     return claimed
+
+
+
+@app.post("/repair/runner/{request_id}/authorize-write")
+async def authorize_repair_runner_write(request_id: str, request: Request, db=Depends(get_db)):
+    """Consume the exact owner receipt after isolated quality checks, before write-token minting."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        raise HTTPException(401, "Invalid repair runner credential")
+    if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+        raise HTTPException(404, "Execution request not found")
+    row = await db.prepare(
+        """SELECT incident_id, base_sha, patch_sha256, approved_paths_json,
+        approval_receipt_id, status, expires_at FROM repair_execution_requests
+        WHERE id = ?"""
+    ).bind(request_id).first()
+    if not row or row["status"] != "claimed" or int(row["expires_at"]) <= int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(404, "Claimed execution request is unavailable or expired")
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner approval context is unavailable")
+    try:
+        approved_paths = tuple(json.loads(row["approved_paths_json"]))
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(409, "Execution request approval metadata is invalid")
+    approval = PatchApproval(
+        approval_id=row["approval_receipt_id"],
+        approved_by=hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32],
+        incident_id=row["incident_id"], base_sha=row["base_sha"],
+        patch_sha256=row["patch_sha256"], approved_paths=approved_paths,
+    )
+    try:
+        consumed = await D1PatchApprovalStore(db).verify_and_consume(approval)
+    except Exception:
+        raise HTTPException(503, "Owner approval receipt verification failed")
+    if consumed is not True:
+        raise HTTPException(403, "Owner approval is expired, revoked, mismatched, or already consumed")
+    await write_audit(db, "patch_execution.owner_receipt_consumed", request_id,
+                      f"incident={row['incident_id']}; patch={row['patch_sha256']}")
+    return {"request_id": request_id, "owner_approval": "consumed", "write_token_eligible": True}
 
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
