@@ -27,12 +27,16 @@ class FakeVerifier:
         self.valid = valid
         self.raises = raises
         self.calls = 0
+        self.consumed = False
 
-    def verify(self, approval):
+    def verify_and_consume(self, approval):
         self.calls += 1
         if self.raises:
             raise RuntimeError("verification backend unavailable")
-        return self.valid
+        if not self.valid or self.consumed:
+            return False
+        self.consumed = True
+        return True
 
 
 class FakeWorkspace:
@@ -102,6 +106,24 @@ class PatchExecutorTests(unittest.TestCase):
         self.assertEqual([call[0] for call in workspace.calls],
                          ["branch", "apply", "checks", "draft_pr"])
         self.assertIn("not merged or deployed", workspace.calls[-1][3])
+
+
+    def test_owner_approval_receipt_is_single_use(self):
+        verifier = FakeVerifier()
+        workspace = FakeWorkspace()
+
+        first = execute_approved_patch(make_request(), verifier, workspace)
+        self.assertEqual(first.status, "draft_pr_created")
+
+        replay_workspace = FakeWorkspace()
+        replay = execute_approved_patch(
+            make_request(), verifier, replay_workspace
+        )
+
+        self.assertEqual(replay.status, "blocked")
+        self.assertIn("owner_approval_not_verified", replay.reasons)
+        self.assertEqual(replay_workspace.calls, [])
+        self.assertEqual(verifier.calls, 2)
 
     def test_unverified_approval_has_no_workspace_side_effects(self):
         verifier = FakeVerifier(valid=False)
