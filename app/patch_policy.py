@@ -40,8 +40,28 @@ class PatchDecision:
 
 def evaluate_patch(files: Iterable[ChangedFile]) -> PatchDecision:
     """Return an explainable fail-closed decision for a proposed repair diff."""
-    items = tuple(files)
+    try:
+        items = tuple(files)
+    except (TypeError, ValueError):
+        return PatchDecision(False, ("invalid_changed_file_collection",))
     reasons: list[str] = []
+
+    if any(not isinstance(item, ChangedFile) for item in items):
+        return PatchDecision(False, ("invalid_changed_file_entry",))
+
+    for item in items:
+        if not isinstance(item.filename, str) or not isinstance(item.status, str):
+            reasons.append("invalid_file_metadata")
+            continue
+        counts = (item.additions, item.deletions, item.changes)
+        if any(not isinstance(value, int) or isinstance(value, bool) for value in counts):
+            reasons.append(f"invalid_change_counts:{item.filename}")
+            continue
+        if min(counts) < 0 or item.changes != item.additions + item.deletions:
+            reasons.append(f"invalid_change_counts:{item.filename}")
+
+    if reasons:
+        return PatchDecision(False, tuple(dict.fromkeys(reasons)))
 
     if not items:
         reasons.append("empty_patch")
@@ -73,7 +93,14 @@ def evaluate_patch(files: Iterable[ChangedFile]) -> PatchDecision:
             reasons.append(f"sensitive_path:{normalized}")
         if lower.endswith(DENIED_SUFFIXES):
             reasons.append(f"sensitive_file_type:{normalized}")
-        if path.startswith("/") or ".." in PurePosixPath(path).parts:
+        if (
+            path.startswith("/")
+            or "\x00" in path
+            or ".." in PurePosixPath(path).parts
+            or PurePosixPath(path).is_absolute()
+            or (len(path) >= 2 and path[1] == ":")
+            or normalized in {"", "."}
+        ):
             reasons.append(f"unsafe_path:{normalized}")
         if min(item.additions, item.deletions, item.changes) < 0:
             reasons.append(f"invalid_change_counts:{normalized}")
