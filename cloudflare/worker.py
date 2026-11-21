@@ -2266,6 +2266,7 @@ async def fetch_repair_patch(request_id: str, request: Request, db=Depends(get_d
     if not isinstance(expected, str) or not expected:
         raise HTTPException(503, "Repair runner authentication is not configured")
     if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        await enforce_auth_failure_rate_limit(request)
         raise HTTPException(401, "Invalid repair runner credential")
     claimed = await claim_execution_patch(db, request_id=request_id)
     if claimed is None:
