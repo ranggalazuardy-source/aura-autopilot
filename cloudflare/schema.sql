@@ -271,3 +271,24 @@ CREATE TABLE IF NOT EXISTS operational_heartbeats (
     recovered_leases INTEGER NOT NULL DEFAULT 0 CHECK(recovered_leases >= 0)
 );
 CREATE INDEX IF NOT EXISTS idx_operational_heartbeats_scheduled ON operational_heartbeats(scheduled_at);
+
+
+-- Single-use owner receipts for guarded automated repair execution.
+-- Consumption is a single conditional UPDATE ... RETURNING statement.
+CREATE TABLE IF NOT EXISTS patch_approval_receipts (
+    id TEXT PRIMARY KEY,
+    approved_by TEXT NOT NULL,
+    incident_id TEXT NOT NULL,
+    base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
+    patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
+    approved_paths_json TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    consumed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    CHECK(expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_expiry
+    ON patch_approval_receipts(expires_at);
+CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_incident
+    ON patch_approval_receipts(incident_id, created_at);
