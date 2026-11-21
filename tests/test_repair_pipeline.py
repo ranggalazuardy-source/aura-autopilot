@@ -1,7 +1,12 @@
+import hashlib
 import unittest
 
+from app.patch_executor import PatchApproval
 from app.patch_policy import ChangedFile
-from app.services.repair_pipeline import prepare_repair_proposal
+from app.services.repair_pipeline import (
+    build_execution_request,
+    prepare_repair_proposal,
+)
 
 
 BASE = "a" * 40
@@ -40,12 +45,29 @@ class RepairPipelineTests(unittest.TestCase):
         value.update(updates)
         return value
 
+    def proposal(self):
+        return prepare_repair_proposal(
+            self.incident(), base_sha=BASE, generator=FakeGenerator()
+        )
+
+    def approval_for(self, proposal):
+        return PatchApproval(
+            approval_id="opaque-receipt",
+            approved_by="owner-hash",
+            incident_id=proposal.incident_id,
+            base_sha=proposal.base_sha,
+            patch_sha256=proposal.patch_sha256,
+            approved_paths=proposal.changed_paths,
+        )
+
     def test_valid_incident_returns_proposal_without_side_effect_flags(self):
         generator = FakeGenerator()
         result = prepare_repair_proposal(self.incident(), base_sha=BASE, generator=generator)
         self.assertEqual(result.status, "ready_for_owner_approval")
         self.assertEqual(result.changed_paths, ("app/agents/demo.py",))
         self.assertEqual(len(result.patch_sha256), 64)
+        self.assertIsNotNone(result.plan)
+        self.assertEqual(result.changed_files, FILES)
         self.assertTrue(result.requires_owner_approval)
         self.assertFalse(result.provider_invoked)
         self.assertFalse(result.files_written)
@@ -96,6 +118,40 @@ class RepairPipelineTests(unittest.TestCase):
     def test_invalid_incident_type_fails_closed(self):
         result = prepare_repair_proposal([], base_sha=BASE, generator=FakeGenerator())
         self.assertEqual(result.status, "blocked")
+
+    def test_proposal_converts_to_executor_request_only_with_matching_receipt(self):
+        proposal = self.proposal()
+        request = build_execution_request(proposal, self.approval_for(proposal))
+        self.assertEqual(request.plan, proposal.plan)
+        self.assertEqual(request.patch_text, DIFF)
+        self.assertEqual(request.base_sha, BASE)
+        self.assertEqual(request.approval.patch_sha256, hashlib.sha256(DIFF.encode()).hexdigest())
+
+    def test_conversion_rejects_wrong_incident_receipt(self):
+        proposal = self.proposal()
+        approval = self.approval_for(proposal)
+        wrong = PatchApproval(
+            approval_id=approval.approval_id, approved_by=approval.approved_by,
+            incident_id="other-incident", base_sha=approval.base_sha,
+            patch_sha256=approval.patch_sha256, approved_paths=approval.approved_paths,
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            build_execution_request(proposal, wrong)
+
+    def test_conversion_rejects_changed_patch_digest(self):
+        proposal = self.proposal()
+        tampered = type(proposal)(
+            **{**proposal.__dict__, "patch_text": proposal.patch_text + "# tampered\n"}
+        )
+        with self.assertRaisesRegex(ValueError, "digest changed"):
+            build_execution_request(tampered, self.approval_for(proposal))
+
+    def test_blocked_proposal_cannot_be_converted(self):
+        blocked = prepare_repair_proposal(
+            self.incident(category="database_schema"), base_sha=BASE, generator=FakeGenerator()
+        )
+        with self.assertRaisesRegex(ValueError, "not eligible"):
+            build_execution_request(blocked, self.approval_for(self.proposal()))
 
 
 if __name__ == "__main__":
