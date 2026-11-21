@@ -47,6 +47,14 @@ class RepairIncidentResolutionTests(unittest.TestCase):
         self.assertIn("completed", source)
         self.assertIn("success", source)
 
+    def test_verification_must_be_newer_same_branch_and_descendant_commit(self):
+        source = ast.unparse(self.function("resolve_repair_incident"))
+        self.assertIn("incident.head_branch", source)
+        self.assertIn("verification_created <= incident_seen", source)
+        self.assertIn("/compare/", source)
+        self.assertIn("incident.head_sha", source)
+        self.assertIn("comparison_data.get('status') not in ('ahead', 'identical')", source)
+
     def test_resolution_is_audited_and_has_no_execution_side_effects(self):
         source = ast.unparse(self.function("resolve_repair_incident"))
         self.assertIn("operational.incident_resolved", source)
