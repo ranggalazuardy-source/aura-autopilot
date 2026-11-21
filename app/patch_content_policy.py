@@ -1,0 +1,120 @@
+"""Validate unified-diff content against the guarded patch metadata policy.
+
+This is a validation-only stage. It never applies patches or writes to disk.
+"""
+
+from collections.abc import Iterable
+
+from app.patch_policy import ChangedFile, PatchDecision, evaluate_patch
+
+
+def evaluate_unified_diff(
+    patch_text: str,
+    files: Iterable[ChangedFile],
+) -> PatchDecision:
+    """Fail closed unless textual unified-diff headers and counts match metadata."""
+    items = tuple(files)
+    reasons: list[str] = []
+
+    if not isinstance(patch_text, str) or not patch_text.strip():
+        return PatchDecision(False, ("empty_diff_content",))
+
+    lines = patch_text.splitlines()
+    blocks: list[list[str]] = []
+    current: list[str] | None = None
+    for line in lines:
+        if line.startswith("diff --git "):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is not None:
+            current.append(line)
+        elif line.strip():
+            reasons.append("content_before_first_file_header")
+    if current is not None:
+        blocks.append(current)
+    if not blocks:
+        reasons.append("missing_file_headers")
+    if len(blocks) != len(items):
+        reasons.append("file_count_mismatch")
+
+    metadata_by_path = {item.filename.replace("\\", "/"): item for item in items}
+    seen: set[str] = set()
+
+    for block in blocks:
+        header = block[0].split()
+        if len(header) != 4 or header[0:2] != ["diff", "--git"]:
+            reasons.append("malformed_diff_header")
+            continue
+        old_header, new_header = header[2], header[3]
+        if not old_header.startswith("a/") or not new_header.startswith("b/"):
+            reasons.append("invalid_diff_header_paths")
+            continue
+        old_path, new_path = old_header[2:], new_header[2:]
+        if old_path != new_path:
+            reasons.append("path_change_not_allowed")
+            continue
+        path = new_path.replace("\\", "/")
+        if path in seen:
+            reasons.append("duplicate_diff_file")
+        seen.add(path)
+        if path not in metadata_by_path:
+            reasons.append(f"diff_path_missing_from_metadata:{path}")
+            continue
+
+        file_lines = block[1:]
+        old_markers = [line[6:] for line in file_lines if line.startswith("--- a/")]
+        new_markers = [line[6:] for line in file_lines if line.startswith("+++ b/")]
+        if old_markers != [path] or new_markers != [path]:
+            reasons.append(f"file_header_mismatch:{path}")
+        if any(
+            line.startswith((
+                "new file mode ", "deleted file mode ", "old mode ",
+                "new mode ", "rename from ", "rename to ",
+                "copy from ", "copy to ", "Binary files ", "GIT binary patch",
+            ))
+            for line in file_lines
+        ):
+            reasons.append(f"non_text_or_mode_change:{path}")
+
+        additions = 0
+        deletions = 0
+        in_hunk = False
+        hunk_seen = False
+        for line in file_lines:
+            if line.startswith("@@"):
+                hunk_seen = True
+                in_hunk = True
+                if not line.startswith("@@ -") or " +" not in line or not line.endswith(" @@"):
+                    reasons.append(f"malformed_hunk_header:{path}")
+                continue
+            if line.startswith(("--- ", "+++ ")) or line.startswith("\\"):
+                in_hunk = False
+                continue
+            if not in_hunk:
+                continue
+            if line.startswith("+"):
+                additions += 1
+            elif line.startswith("-"):
+                deletions += 1
+            elif line.startswith(" "):
+                continue
+            elif line == "":
+                # Empty context lines in unified diffs are represented by a
+                # leading space; a bare empty line is ambiguous and rejected.
+                reasons.append(f"ambiguous_hunk_line:{path}")
+            else:
+                reasons.append(f"invalid_hunk_line:{path}")
+        if not hunk_seen:
+            reasons.append(f"missing_hunks:{path}")
+
+        metadata = metadata_by_path[path]
+        if additions != metadata.additions or deletions != metadata.deletions:
+            reasons.append(f"change_count_mismatch:{path}")
+
+    if seen != set(metadata_by_path):
+        reasons.append("metadata_diff_path_set_mismatch")
+
+    metadata_decision = evaluate_patch(items)
+    reasons.extend(metadata_decision.reasons)
+    return PatchDecision(not reasons, tuple(dict.fromkeys(reasons)))
