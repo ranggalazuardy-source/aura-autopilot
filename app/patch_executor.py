@@ -49,8 +49,13 @@ class PatchExecutionResult:
 
 
 class ApprovalVerifier(Protocol):
-    def verify(self, approval: PatchApproval) -> bool:
-        """Verify a stored, owner-issued, unexpired, unrevoked receipt."""
+    def verify_and_consume(self, approval: PatchApproval) -> bool:
+        """Atomically verify and consume a valid, single-use owner receipt.
+
+        The backing store must enforce expiry, revocation, owner identity, and
+        one-time use in one transaction so concurrent executions cannot replay
+        the same approval.
+        """
 
 
 class PatchWorkspace(Protocol):
@@ -168,7 +173,7 @@ def execute_approved_patch(
         return _blocked(*reasons)
 
     try:
-        approval_valid = verifier.verify(approval)
+        approval_valid = verifier.verify_and_consume(approval)
     except Exception:
         return _blocked("approval_verification_failed")
     if approval_valid is not True:
