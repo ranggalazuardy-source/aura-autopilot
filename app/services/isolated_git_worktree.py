@@ -69,6 +69,22 @@ class IsolatedGitWorktree:
             raise GitWorktreeError("worktree has not been created")
         if not isinstance(patch_text, str) or not patch_text or "\x00" in patch_text:
             raise GitWorktreeError("patch text is invalid")
+        declared_paths: list[str] = []
+        for line in patch_text.splitlines():
+            if line.startswith("diff --git "):
+                parts = line.split()
+                if len(parts) != 4 or not parts[2].startswith("a/") or not parts[3].startswith("b/"):
+                    raise GitWorktreeError("patch contains an unsupported file header")
+                old_path, new_path = parts[2][2:], parts[3][2:]
+                if old_path != new_path:
+                    raise GitWorktreeError("patch path changes are not allowed")
+                if old_path.startswith("/") or any(part in {"", ".", ".."} for part in old_path.split("/")):
+                    raise GitWorktreeError("patch contains an unsafe path")
+                if not old_path.startswith(_ALLOWED_PREFIXES):
+                    raise GitWorktreeError("patch changed a path outside the repair allowlist")
+                declared_paths.append(old_path)
+        if not declared_paths or len(set(declared_paths)) != len(declared_paths):
+            raise GitWorktreeError("patch file headers are missing or duplicated")
         self._run(["git", "apply", "--check", "--whitespace=error", "-"], cwd=self.path, input_text=patch_text)
         self._run(["git", "apply", "--whitespace=error", "-"], cwd=self.path, input_text=patch_text)
         changed = self._run(["git", "diff", "--name-only", "--diff-filter=ACDMRT"], cwd=self.path)
