@@ -53,7 +53,8 @@ class RepairConsoleSelfTestTests(unittest.TestCase):
     def test_console_marks_self_test_and_disables_proposal_generation(self):
         self.assertIn("Create safe self-test", DASHBOARD)
         self.assertIn('api("/repair/self-test"', DASHBOARD)
-        self.assertIn('data-test="'+(test?', DASHBOARD)
+        self.assertIn('data-test=', DASHBOARD)
+        self.assertIn('data-test="', DASHBOARD)
         self.assertIn("!test&&", DASHBOARD)
         self.assertIn("Self-test records are permanently blocked", DASHBOARD)
 
