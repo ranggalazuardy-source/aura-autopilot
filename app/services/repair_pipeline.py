@@ -98,7 +98,7 @@ def prepare_repair_proposal(
         reasons = tuple(dict.fromkeys((*metadata.reasons, *diff.reasons)))
         return RepairProposal("blocked", incident_id, base_sha, reasons=reasons or ("generated_patch_rejected",))
 
-    paths = tuple(sorted(item.filename.replace("\\\\", "/") for item in changed_files))
+    paths = tuple(sorted(item.filename.replace("\\", "/") for item in changed_files))
     planned_paths = tuple(sorted(plan.candidate_paths))
     if paths != planned_paths:
         return RepairProposal("blocked", incident_id, base_sha, reasons=("generated_paths_do_not_match_incident_plan",))
