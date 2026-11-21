@@ -974,7 +974,8 @@ def assemble_agent_context(agent: str, objective: str, pack_ids: list[str]):
     skill_blocks = []
     for pack_id in pack_ids:
         skill_blocks.append("## Assigned skill: " + pack_id + "\n" + SKILL_INSTRUCTIONS[pack_id])
-    role_profile = AGENT_OFFICE_PROFILES.get(agent, {})
+    canonical_agent = AGENT_ALIASES.get(agent, agent)
+    role_profile = AGENT_OFFICE_PROFILES.get(canonical_agent, {})
     role_block = (
         "## Agency Agents role: " + agent + "\n"
         + "Division: " + str(role_profile.get("division", "Unassigned")) + "\n"
