@@ -2,7 +2,7 @@
 -- Preserve all existing claims while allowing Gemini and explicit failed outcomes.
 CREATE TABLE model_execution_claims_new (
     task_id TEXT PRIMARY KEY,
-    provider TEXT NOT NULL CHECK(provider IN ('cloudflare','groq','gemini')),
+    provider TEXT NOT NULL CHECK(provider IN ('auto','cloudflare','groq','gemini')),
     status TEXT NOT NULL CHECK(status IN ('started','completed','failed')),
     artifact_id TEXT,
     created_at TEXT NOT NULL,
