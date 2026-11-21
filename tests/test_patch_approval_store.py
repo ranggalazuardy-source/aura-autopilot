@@ -88,6 +88,18 @@ class PatchApprovalStoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await store.verify_and_consume(approval))
         self.assertIsNone(db.sql)
 
+
+    async def test_invalid_sha_formats_fail_before_database_access(self):
+        db = FakeD1()
+        store = D1PatchApprovalStore(db, clock=lambda: 1_800_000_000)
+        for approval in (
+            Approval(base_sha="not-a-sha"),
+            Approval(patch_sha256="not-a-digest"),
+        ):
+            with self.subTest(approval=approval):
+                self.assertFalse(await store.verify_and_consume(approval))
+        self.assertIsNone(db.sql)
+
     async def test_invalid_clock_fails_closed(self):
         db = FakeD1()
         store = D1PatchApprovalStore(db, clock=lambda: 0)
