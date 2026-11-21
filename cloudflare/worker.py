@@ -16,8 +16,13 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from workers import asgi, handler
+from app.services.patch_approval_issuer import issue_patch_approval_receipt
+from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch, dispatch_next_execution_request
+from app.services.patch_approval_store import D1PatchApprovalStore
+from app.patch_executor import PatchApproval
+from app.repair_planner import build_repair_plan
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -183,6 +188,26 @@ async def persist_runtime_exception(request: Request, error_id: str, exc: Except
         print("AURA_INCIDENT_PERSIST_FAILED", type(persist_error).__name__, str(persist_error)[:200])
 
 
+class PatchApprovalReceiptIn(BaseModel):
+    incident_id: str = Field(min_length=1, max_length=64)
+    base_sha: str = Field(min_length=40, max_length=40)
+    patch_sha256: str = Field(min_length=64, max_length=64)
+    approved_paths: list[str] = Field(min_length=1, max_length=6)
+    ttl_seconds: int = Field(default=300, ge=1, le=600)
+    confirm_owner_approval: StrictBool
+
+
+
+
+class RepairExecutionRequestIn(BaseModel):
+    incident_id: str = Field(min_length=1, max_length=64)
+    base_sha: str = Field(min_length=40, max_length=40)
+    patch_text: str = Field(min_length=1, max_length=256000)
+    approved_paths: list[str] = Field(min_length=1, max_length=6)
+    approval_receipt_id: str = Field(min_length=32, max_length=128)
+    ttl_seconds: int = Field(default=300, ge=1, le=600)
+
+
 class OpportunityIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     channel: str = Field(min_length=2, max_length=80)
@@ -253,6 +278,24 @@ class ResearchSourceLinkIn(BaseModel):
 class ResearchSourceVerifyIn(BaseModel):
     status: str = Field(pattern="^(verified|rejected)$")
     reviewer_notes: str = Field(default="", max_length=1000)
+
+
+class CIIncidentIntakeIn(BaseModel):
+    repository: str = Field(pattern="^ranggalazuardy-source/aura-autopilot$")
+    workflow_name: str = Field(pattern="^(AURA quality checks|Deploy AURA to Cloudflare)$")
+    run_id: int = Field(gt=0)
+    run_attempt: int = Field(ge=1, le=100)
+    run_url: str = Field(min_length=40, max_length=500)
+    head_branch: str = Field(min_length=1, max_length=255)
+    head_sha: str = Field(pattern="^[0-9a-f]{40}$")
+    conclusion: str = Field(pattern="^failure$")
+    failed_jobs: list[str] = Field(default_factory=list, max_length=20)
+
+
+class RepairIncidentTriageIn(BaseModel):
+    category: str = Field(pattern="^(automated_test_regression|python_syntax_or_import|dependency_or_security_audit|database_schema|cloudflare_deployment_or_config|container_or_runtime|unknown_or_unclassified)$")
+    candidate_paths: list[str] = Field(default_factory=list, max_length=6)
+    confirm_owner_triage: StrictBool
 
 
 class OpportunityScoreIn(BaseModel):
@@ -2154,6 +2197,305 @@ async def list_ceo_decisions(db=Depends(get_db)):
         owner_approval_required, created_at FROM ceo_decisions ORDER BY created_at DESC LIMIT 100"""
     ).all()
     return d1_rows(result)
+
+
+@app.post("/repair/approvals", dependencies=[Depends(require_api_key)])
+async def issue_repair_approval(
+    payload: PatchApprovalReceiptIn,
+    request: Request,
+    db=Depends(get_db),
+):
+    """Issue a short-lived repair receipt only after explicit owner confirmation."""
+    if payload.confirm_owner_approval is not True:
+        raise HTTPException(400, "Explicit owner approval confirmation is required")
+
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+
+    try:
+        receipt_id = await issue_patch_approval_receipt(
+            db,
+            authenticated_owner_id=owner_id,
+            incident_id=payload.incident_id,
+            base_sha=payload.base_sha,
+            patch_sha256=payload.patch_sha256,
+            approved_paths=payload.approved_paths,
+            ttl_seconds=payload.ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+    await write_audit(
+        db,
+        "patch_approval.issued",
+        receipt_id,
+        f"incident={payload.incident_id}; base={payload.base_sha}; "
+        f"patch={payload.patch_sha256}; paths={json.dumps(payload.approved_paths)}; "
+        f"ttl={payload.ttl_seconds}",
+    )
+    return {
+        "receipt_id": receipt_id,
+        "incident_id": payload.incident_id,
+        "expires_in_seconds": payload.ttl_seconds,
+        "status": "issued",
+    }
+
+
+@app.post("/repair/execution-requests", dependencies=[Depends(require_api_key)])
+async def create_repair_execution_request(payload: RepairExecutionRequestIn, request: Request, db=Depends(get_db)):
+    """Persist a patch request only when its owner receipt exactly matches it."""
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+    patch_sha = hashlib.sha256(payload.patch_text.encode("utf-8")).hexdigest()
+    paths_json = json.dumps(sorted(payload.approved_paths), separators=(",", ":"))
+    receipt = await db.prepare(
+        """SELECT id FROM patch_approval_receipts
+        WHERE id = ? AND approved_by = ? AND incident_id = ? AND base_sha = ?
+          AND patch_sha256 = ? AND approved_paths_json = ? AND expires_at > ?
+          AND revoked_at IS NULL AND consumed_at IS NULL"""
+    ).bind(payload.approval_receipt_id, owner_id, payload.incident_id,
+           payload.base_sha, patch_sha, paths_json, int(datetime.now(timezone.utc).timestamp())).first()
+    if not receipt:
+        raise HTTPException(403, "A matching, unexpired, unused owner approval receipt is required")
+    try:
+        result = await create_execution_request(
+            db, incident_id=payload.incident_id, base_sha=payload.base_sha,
+            patch_text=payload.patch_text, approved_paths=payload.approved_paths,
+            receipt_id=payload.approval_receipt_id, ttl_seconds=payload.ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    await write_audit(db, "patch_execution.request_queued", result["request_id"],
+                      f"incident={payload.incident_id}; base={payload.base_sha}; patch={patch_sha}")
+    return result
+
+
+@app.post("/repair/incidents", dependencies=[Depends(require_api_key)])
+async def ingest_ci_incident(payload: CIIncidentIntakeIn, db=Depends(get_db)):
+    """Store sanitized workflow failure metadata for human-led IT triage.
+
+    Raw logs, patches, candidate paths, secrets and model prompts are never
+    accepted here. Every incident remains unclassified until evidence review.
+    """
+    parsed_url = urlsplit(payload.run_url)
+    expected_path = f"/{payload.repository}/actions/runs/{payload.run_id}"
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.netloc != "github.com"
+        or parsed_url.path.rstrip("/") != expected_path
+        or parsed_url.query
+        or parsed_url.fragment
+        or parsed_url.username
+        or parsed_url.password
+    ):
+        raise HTTPException(422, "Workflow run URL does not match the repository and run ID")
+    branch = payload.head_branch.strip()
+    if not branch or len(branch) > 255 or any(ord(char) < 32 for char in branch):
+        raise HTTPException(422, "Invalid workflow branch metadata")
+    failed_jobs = []
+    for job in payload.failed_jobs:
+        if not isinstance(job, str) or not re.fullmatch(r"[A-Za-z0-9 _./:-]{1,120}", job):
+            raise HTTPException(422, "Failed job names must be short, plain-text labels")
+        failed_jobs.append(job)
+    fingerprint = f"github_actions:{payload.repository}:{payload.run_id}:{payload.run_attempt}"
+    incident_id = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    summary = f"{payload.workflow_name} failed on {branch} at {payload.head_sha[:12]}"
+    await record_operational_incident(db, "github_actions", fingerprint, summary, "high")
+    evidence = json.dumps(failed_jobs, separators=(",", ":"))
+    await db.prepare(
+        """INSERT INTO operational_incident_evidence
+        (incident_id, repository, workflow_name, workflow_run_id, run_attempt,
+         run_url, head_branch, head_sha, conclusion, failed_jobs_json,
+         triage_category, candidate_paths_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failure', ?, 'unclassified', '[]', ?)
+        ON CONFLICT(incident_id) DO UPDATE SET
+          run_url = excluded.run_url,
+          head_branch = excluded.head_branch,
+          head_sha = excluded.head_sha,
+          failed_jobs_json = excluded.failed_jobs_json,
+          created_at = excluded.created_at"""
+    ).bind(
+        incident_id, payload.repository, payload.workflow_name, payload.run_id,
+        payload.run_attempt, payload.run_url, branch, payload.head_sha,
+        evidence, now_iso(),
+    ).run()
+    await write_audit(
+        db, "operational.ci_evidence_ingested", incident_id,
+        f"run={payload.run_id}; attempt={payload.run_attempt}; failed_jobs={len(failed_jobs)}",
+    )
+    return {
+        "incident_id": incident_id,
+        "status": "open",
+        "owner": "Incident Response Commander",
+        "triage_category": "unclassified",
+        "candidate_paths": [],
+        "repair_eligible": False,
+    }
+
+
+@app.get("/repair/incidents", dependencies=[Depends(require_api_key)])
+async def list_repair_incidents(db=Depends(get_db)):
+    """Owner-only view of sanitized CI incidents awaiting triage."""
+    result = await db.prepare(
+        """SELECT i.id AS incident_id, i.source, i.severity, i.summary, i.status,
+                  i.occurrence_count, i.first_seen_at, i.last_seen_at,
+                  e.workflow_name, e.workflow_run_id, e.run_attempt, e.run_url,
+                  e.head_branch, e.head_sha, e.failed_jobs_json,
+                  e.triage_category, e.candidate_paths_json, e.triage_owner
+           FROM operational_incidents i
+           LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
+           WHERE i.source = 'github_actions'
+           ORDER BY i.last_seen_at DESC LIMIT 50"""
+    ).all()
+    return d1_rows(result)
+
+
+@app.post("/repair/incidents/{incident_id}/triage", dependencies=[Depends(require_api_key)])
+async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriageIn, db=Depends(get_db)):
+    """Record an explicit owner triage decision; never generates or executes a patch."""
+    if not re.fullmatch(r"[0-9a-f]{24}", incident_id):
+        raise HTTPException(404, "Incident not found")
+    if payload.confirm_owner_triage is not True:
+        raise HTTPException(400, "Explicit owner triage confirmation is required")
+    row = await db.prepare(
+        """SELECT id FROM operational_incidents
+           WHERE id = ? AND source = 'github_actions' AND status IN ('open','investigating')"""
+    ).bind(incident_id).first()
+    if not row:
+        raise HTTPException(404, "Open CI incident not found")
+    safe_categories = {"automated_test_regression", "python_syntax_or_import"}
+    paths = payload.candidate_paths
+    if len(paths) != len(set(paths)):
+        raise HTTPException(422, "Candidate paths must be unique")
+    if any(not isinstance(path, str) or not path or len(path) > 240 or "\x00" in path for path in paths):
+        raise HTTPException(422, "Candidate paths contain invalid values")
+    if payload.category in safe_categories:
+        plan = build_repair_plan(incident_id, payload.category, paths)
+        if plan.status != "ready_for_owner_approval":
+            raise HTTPException(422, {"detail": "Candidate paths are not eligible", "reasons": list(plan.reasons)})
+    else:
+        if paths:
+            raise HTTPException(422, "High-risk or unclassified incidents cannot carry repair candidate paths")
+        plan = build_repair_plan(incident_id, payload.category, ())
+    paths_json = json.dumps(list(plan.candidate_paths), separators=(",", ":"))
+    await db.prepare(
+        """UPDATE operational_incident_evidence
+           SET triage_category = ?, candidate_paths_json = ?, triage_owner = ?
+           WHERE incident_id = ?"""
+    ).bind(payload.category, paths_json,
+           "IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander",
+           incident_id).run()
+    await db.prepare(
+        """UPDATE operational_incidents
+           SET status = 'investigating', last_seen_at = ?
+           WHERE id = ?"""
+    ).bind(now_iso(), incident_id).run()
+    await write_audit(
+        db, "operational.incident_triaged", incident_id,
+        f"category={payload.category}; candidate_paths={len(plan.candidate_paths)}; plan={plan.status}",
+    )
+    return {
+        "incident_id": incident_id,
+        "triage_category": payload.category,
+        "candidate_paths": list(plan.candidate_paths),
+        "owner": "IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander",
+        "repair_eligible": plan.status == "ready_for_owner_approval",
+        "plan_status": plan.status,
+        "reasons": list(plan.reasons),
+        "requires_owner_approval": True,
+        "patch_generated": False,
+        "files_written": False,
+        "merged": False,
+        "deployed": False,
+    }
+
+
+@app.post("/repair/runner/next")
+async def dispatch_next_repair_request(request: Request, db=Depends(get_db)):
+    """Runner-authenticated queue poll; reserves one request without returning patch bytes."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        await enforce_auth_failure_rate_limit(request)
+        raise HTTPException(401, "Invalid repair runner credential")
+    item = await dispatch_next_execution_request(db)
+    if item is None:
+        return {"status": "empty"}
+    await write_audit(db, "patch_execution.runner_dispatched", item["request_id"],
+                      f"base={item['base_sha']}; expires_at={item['expires_at']}")
+    return item
+
+
+@app.get("/repair/runner/{request_id}/patch")
+async def fetch_repair_patch(request_id: str, request: Request, db=Depends(get_db)):
+    """Runner-only, one-time patch retrieval using a dedicated shared secret."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        await enforce_auth_failure_rate_limit(request)
+        raise HTTPException(401, "Invalid repair runner credential")
+    claimed = await claim_execution_patch(db, request_id=request_id)
+    if claimed is None:
+        raise HTTPException(404, "Execution request is expired, unavailable, or already claimed")
+    await write_audit(db, "patch_execution.patch_claimed", request_id,
+                      f"incident={claimed['incident_id']}; base={claimed['base_sha']}")
+    return claimed
+
+
+
+@app.post("/repair/runner/{request_id}/authorize-write")
+async def authorize_repair_runner_write(request_id: str, request: Request, db=Depends(get_db)):
+    """Consume the exact owner receipt after isolated quality checks, before write-token minting."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        raise HTTPException(401, "Invalid repair runner credential")
+    if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+        raise HTTPException(404, "Execution request not found")
+    row = await db.prepare(
+        """SELECT incident_id, base_sha, patch_sha256, approved_paths_json,
+        approval_receipt_id, status, expires_at FROM repair_execution_requests
+        WHERE id = ?"""
+    ).bind(request_id).first()
+    if not row or row["status"] != "claimed" or int(row["expires_at"]) <= int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(404, "Claimed execution request is unavailable or expired")
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner approval context is unavailable")
+    try:
+        approved_paths = tuple(json.loads(row["approved_paths_json"]))
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(409, "Execution request approval metadata is invalid")
+    approval = PatchApproval(
+        approval_id=row["approval_receipt_id"],
+        approved_by=hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32],
+        incident_id=row["incident_id"], base_sha=row["base_sha"],
+        patch_sha256=row["patch_sha256"], approved_paths=approved_paths,
+    )
+    try:
+        consumed = await D1PatchApprovalStore(db).verify_and_consume(approval)
+    except Exception:
+        raise HTTPException(503, "Owner approval receipt verification failed")
+    if consumed is not True:
+        raise HTTPException(403, "Owner approval is expired, revoked, mismatched, or already consumed")
+    await write_audit(db, "patch_execution.owner_receipt_consumed", request_id,
+                      f"incident={row['incident_id']}; patch={row['patch_sha256']}")
+    return {"request_id": request_id, "owner_approval": "consumed", "write_token_eligible": True}
 
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])

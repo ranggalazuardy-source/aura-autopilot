@@ -262,6 +262,29 @@ CREATE TABLE IF NOT EXISTS operational_incidents (
 );
 CREATE INDEX IF NOT EXISTS idx_operational_incidents_status ON operational_incidents(status, last_seen_at);
 
+-- Sanitized provenance for CI/runtime incidents; never stores raw logs or secrets.
+CREATE TABLE IF NOT EXISTS operational_incident_evidence (
+    incident_id TEXT PRIMARY KEY,
+    repository TEXT NOT NULL CHECK(repository = 'ranggalazuardy-source/aura-autopilot'),
+    workflow_name TEXT NOT NULL,
+    workflow_run_id INTEGER NOT NULL CHECK(workflow_run_id > 0),
+    run_attempt INTEGER NOT NULL CHECK(run_attempt > 0),
+    run_url TEXT NOT NULL,
+    head_branch TEXT NOT NULL,
+    head_sha TEXT NOT NULL CHECK(length(head_sha) = 40),
+    conclusion TEXT NOT NULL CHECK(conclusion = 'failure'),
+    failed_jobs_json TEXT NOT NULL CHECK(json_valid(failed_jobs_json) AND json_type(failed_jobs_json) = 'array'),
+    triage_category TEXT NOT NULL DEFAULT 'unclassified' CHECK(triage_category IN ('unclassified','automated_test_regression','python_syntax_or_import','dependency_or_security_audit','database_schema','cloudflare_deployment_or_config','container_or_runtime','unknown_or_unclassified')),
+    candidate_paths_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(candidate_paths_json) AND json_type(candidate_paths_json) = 'array'),
+    triage_owner TEXT NOT NULL DEFAULT 'Incident Response Commander' CHECK(triage_owner IN ('Incident Response Commander','IT_AI_ENGINEER')),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(incident_id) REFERENCES operational_incidents(id) ON DELETE CASCADE,
+    UNIQUE(repository, workflow_run_id, run_attempt)
+);
+CREATE INDEX IF NOT EXISTS idx_operational_incident_evidence_created
+    ON operational_incident_evidence(created_at);
+
+
 CREATE TABLE IF NOT EXISTS operational_heartbeats (
     id TEXT PRIMARY KEY,
     scheduled_at TEXT NOT NULL,
@@ -271,3 +294,43 @@ CREATE TABLE IF NOT EXISTS operational_heartbeats (
     recovered_leases INTEGER NOT NULL DEFAULT 0 CHECK(recovered_leases >= 0)
 );
 CREATE INDEX IF NOT EXISTS idx_operational_heartbeats_scheduled ON operational_heartbeats(scheduled_at);
+
+
+-- Single-use owner receipts for guarded automated repair execution.
+-- Consumption is a single conditional UPDATE ... RETURNING statement.
+CREATE TABLE IF NOT EXISTS patch_approval_receipts (
+    id TEXT PRIMARY KEY,
+    approved_by TEXT NOT NULL,
+    incident_id TEXT NOT NULL,
+    base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
+    patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
+    approved_paths_json TEXT NOT NULL CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    consumed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    CHECK(expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_expiry
+    ON patch_approval_receipts(expires_at);
+CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_incident
+    ON patch_approval_receipts(incident_id, created_at);
+
+
+-- Single-use repair runner execution requests; patch bytes remain private until claimed.
+CREATE TABLE IF NOT EXISTS repair_execution_requests (
+    id TEXT PRIMARY KEY CHECK(length(id) = 32),
+    incident_id TEXT NOT NULL,
+    base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
+    patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
+    patch_text TEXT NOT NULL CHECK(length(patch_text) BETWEEN 1 AND 256000),
+    approved_paths_json TEXT NOT NULL CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
+    approval_receipt_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','dispatched','claimed','expired','blocked')),
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    claimed_at INTEGER,
+    CHECK(expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_repair_execution_requests_status_expiry
+    ON repair_execution_requests(status, expires_at);

@@ -108,3 +108,45 @@ jobs:
           EOF
           )"
           gh issue create --repo "$GH_REPO" --title "$TITLE" --body "$BODY"
+
+  ingest-into-aura:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && (github.event.workflow_run.name == 'Deploy AURA to Cloudflare' || github.event.workflow_run.run_attempt >= 2) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send sanitized workflow metadata to AURA when owner API access is configured
+        env:
+          AURA_API_KEY: ${{ secrets.AURA_API_KEY }}
+          AURA_API_BASE_URL: ${{ vars.AURA_API_BASE_URL || 'https://aura-autopilot-api.ranggalazuardy.workers.dev' }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$AURA_API_KEY" ]]; then
+            echo "::warning::AURA_API_KEY repository secret is not configured; GitHub issue intake remains active, Worker intake skipped."
+            exit 0
+          fi
+          FAILED_JOBS_JSON="$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" --jq '[.jobs[] | select(.conclusion == "failure") | .name] | unique')"
+          PAYLOAD="$(jq -n \
+            --arg repository "$GH_REPO" \
+            --arg workflow_name "$RUN_NAME" \
+            --argjson run_id "$RUN_ID" \
+            --argjson run_attempt "$RUN_ATTEMPT" \
+            --arg run_url "$RUN_URL" \
+            --arg head_branch "$HEAD_BRANCH" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg conclusion "$CONCLUSION" \
+            --argjson failed_jobs "$FAILED_JOBS_JSON" \
+            '{repository:$repository,workflow_name:$workflow_name,run_id:$run_id,run_attempt:$run_attempt,run_url:$run_url,head_branch:$head_branch,head_sha:$head_sha,conclusion:$conclusion,failed_jobs:$failed_jobs}')"
+          curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+            -X POST "$AURA_API_BASE_URL/repair/incidents" \
+            -H "Content-Type: application/json" \
+            -H "X-AURA-API-Key: $AURA_API_KEY" \
+            --data "$PAYLOAD"
