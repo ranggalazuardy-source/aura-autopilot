@@ -25,7 +25,7 @@ class SkillRoutingTests(unittest.TestCase):
     def test_all_agent_bindings_reference_known_skill_packs(self):
         packs = self.assignments["SKILL_PACKS"]
         bindings = self.assignments["AGENT_SKILLS"]
-        self.assertEqual(len(bindings), 20)
+        self.assertEqual(len(bindings), 24)
         for agent, pack_ids in bindings.items():
             with self.subTest(agent=agent):
                 self.assertTrue(pack_ids)
@@ -175,7 +175,7 @@ class SkillRoutingTests(unittest.TestCase):
                     if isinstance(target, ast.Name) and target.id == "AGENT_OFFICE_PROFILES":
                         profiles = ast.literal_eval(node.value)
         self.assertEqual(set(profiles), set(self.assignments["AGENT_SKILLS"]))
-        self.assertEqual(len(profiles), 20)
+        self.assertEqual(len(profiles), 24)
         self.assertEqual({item["zone"] for item in profiles.values()}, {"command", "research", "marketing", "sales", "operations", "engineering"})
 
     def test_virtual_office_state_uses_live_tasks_leases_and_audit_logs(self):
