@@ -16,6 +16,8 @@ from app.patch_policy import ChangedFile, evaluate_patch
 from app.repair_planner import RepairPlan, build_repair_plan
 from app.patch_executor import PatchApproval, PatchExecutionRequest
 from app.services.incident_repair_bridge import plan_from_incident
+from app.services.async_patch_execution import execute_approved_patch_with_d1
+from app.patch_executor import PatchExecutionResult
 
 
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
@@ -140,4 +142,28 @@ def build_execution_request(
         changed_files=proposal.changed_files,
         base_sha=proposal.base_sha,
         approval=approval,
+    )
+
+
+
+async def execute_repair_proposal(
+    proposal: RepairProposal,
+    approval: PatchApproval,
+    *,
+    db: object,
+    workspace: object,
+    clock=None,
+) -> PatchExecutionResult:
+    """Route a validated proposal through atomic D1 receipt consumption.
+
+    The workspace is an injected trusted runner adapter. This function never
+    constructs one, never enables a provider, and never grants merge/deploy
+    capability. Invalid proposal/receipt bindings fail before touching D1.
+    """
+    try:
+        request = build_execution_request(proposal, approval)
+    except (TypeError, ValueError):
+        return PatchExecutionResult("blocked", reasons=("proposal_or_approval_binding_invalid",))
+    return await execute_approved_patch_with_d1(
+        request, db=db, workspace=workspace, clock=clock
     )
