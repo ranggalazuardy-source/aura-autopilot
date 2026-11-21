@@ -279,6 +279,18 @@ class ResearchSourceVerifyIn(BaseModel):
     reviewer_notes: str = Field(default="", max_length=1000)
 
 
+class CIIncidentIntakeIn(BaseModel):
+    repository: str = Field(pattern="^ranggalazuardy-source/aura-autopilot$")
+    workflow_name: str = Field(pattern="^(AURA quality checks|Deploy AURA to Cloudflare)$")
+    run_id: int = Field(gt=0)
+    run_attempt: int = Field(ge=1, le=100)
+    run_url: str = Field(min_length=40, max_length=500)
+    head_branch: str = Field(min_length=1, max_length=255)
+    head_sha: str = Field(pattern="^[0-9a-f]{40}$")
+    conclusion: str = Field(pattern="^failure$")
+    failed_jobs: list[str] = Field(default_factory=list, max_length=20)
+
+
 class OpportunityScoreIn(BaseModel):
     demand: int = Field(ge=1, le=5)
     competition: int = Field(ge=1, le=5)
@@ -2255,6 +2267,86 @@ async def create_repair_execution_request(payload: RepairExecutionRequestIn, req
     await write_audit(db, "patch_execution.request_queued", result["request_id"],
                       f"incident={payload.incident_id}; base={payload.base_sha}; patch={patch_sha}")
     return result
+
+
+@app.post("/repair/incidents", dependencies=[Depends(require_api_key)])
+async def ingest_ci_incident(payload: CIIncidentIntakeIn, db=Depends(get_db)):
+    """Store sanitized workflow failure metadata for human-led IT triage.
+
+    Raw logs, patches, candidate paths, secrets and model prompts are never
+    accepted here. Every incident remains unclassified until evidence review.
+    """
+    parsed_url = urlsplit(payload.run_url)
+    expected_path = f"/{payload.repository}/actions/runs/{payload.run_id}"
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.netloc != "github.com"
+        or parsed_url.path.rstrip("/") != expected_path
+        or parsed_url.query
+        or parsed_url.fragment
+        or parsed_url.username
+        or parsed_url.password
+    ):
+        raise HTTPException(422, "Workflow run URL does not match the repository and run ID")
+    branch = payload.head_branch.strip()
+    if not branch or len(branch) > 255 or any(ord(char) < 32 for char in branch):
+        raise HTTPException(422, "Invalid workflow branch metadata")
+    failed_jobs = []
+    for job in payload.failed_jobs:
+        if not isinstance(job, str) or not re.fullmatch(r"[A-Za-z0-9 _./:-]{1,120}", job):
+            raise HTTPException(422, "Failed job names must be short, plain-text labels")
+        failed_jobs.append(job)
+    fingerprint = f"github_actions:{payload.repository}:{payload.run_id}:{payload.run_attempt}"
+    incident_id = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    summary = f"{payload.workflow_name} failed on {branch} at {payload.head_sha[:12]}"
+    await record_operational_incident(db, "github_actions", fingerprint, summary, "high")
+    evidence = json.dumps(failed_jobs, separators=(",", ":"))
+    await db.prepare(
+        """INSERT INTO operational_incident_evidence
+        (incident_id, repository, workflow_name, workflow_run_id, run_attempt,
+         run_url, head_branch, head_sha, conclusion, failed_jobs_json,
+         triage_category, candidate_paths_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'failure', ?, 'unclassified', '[]', ?)
+        ON CONFLICT(incident_id) DO UPDATE SET
+          run_url = excluded.run_url,
+          head_branch = excluded.head_branch,
+          head_sha = excluded.head_sha,
+          failed_jobs_json = excluded.failed_jobs_json,
+          created_at = excluded.created_at"""
+    ).bind(
+        incident_id, payload.repository, payload.workflow_name, payload.run_id,
+        payload.run_attempt, payload.run_url, branch, payload.head_sha,
+        evidence, now_iso(),
+    ).run()
+    await write_audit(
+        db, "operational.ci_evidence_ingested", incident_id,
+        f"run={payload.run_id}; attempt={payload.run_attempt}; failed_jobs={len(failed_jobs)}",
+    )
+    return {
+        "incident_id": incident_id,
+        "status": "open",
+        "owner": "Incident Response Commander",
+        "triage_category": "unclassified",
+        "candidate_paths": [],
+        "repair_eligible": False,
+    }
+
+
+@app.get("/repair/incidents", dependencies=[Depends(require_api_key)])
+async def list_repair_incidents(db=Depends(get_db)):
+    """Owner-only view of sanitized CI incidents awaiting triage."""
+    result = await db.prepare(
+        """SELECT i.id AS incident_id, i.source, i.severity, i.summary, i.status,
+                  i.occurrence_count, i.first_seen_at, i.last_seen_at,
+                  e.workflow_name, e.workflow_run_id, e.run_attempt, e.run_url,
+                  e.head_branch, e.head_sha, e.failed_jobs_json,
+                  e.triage_category, e.candidate_paths_json
+           FROM operational_incidents i
+           LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
+           WHERE i.source = 'github_actions'
+           ORDER BY i.last_seen_at DESC LIMIT 50"""
+    ).all()
+    return d1_rows(result)
 
 
 @app.post("/repair/runner/next")
