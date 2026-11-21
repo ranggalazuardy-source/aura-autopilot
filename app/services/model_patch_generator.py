@@ -7,10 +7,11 @@ GitHub itself.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
-from app.patch_policy import ChangedFile
+from app.patch_policy import ChangedFile, evaluate_patch
 
 
 MAX_SOURCE_FILE_CHARS = 12_000
@@ -46,7 +47,7 @@ class BoundedModelPatchGenerator:
     def _read_sources(self, incident: Mapping[str, object], plan: Mapping[str, object]) -> dict[str, str]:
         base_sha = incident.get("base_sha")
         candidate_paths = plan.get("candidate_paths")
-        if not isinstance(base_sha, str) or len(base_sha) != 40:
+        if not isinstance(base_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", base_sha):
             raise ValueError("immutable_base_sha_required")
         if (
             not isinstance(candidate_paths, (list, tuple))
@@ -56,6 +57,12 @@ class BoundedModelPatchGenerator:
             or len(set(candidate_paths)) != len(candidate_paths)
         ):
             raise ValueError("explicit_candidate_paths_required")
+
+        path_policy = evaluate_patch(
+            ChangedFile(path, "modified", 0, 0, 0) for path in candidate_paths
+        )
+        if not path_policy.allowed:
+            raise ValueError("candidate_paths_blocked:" + ",".join(path_policy.reasons))
 
         sources: dict[str, str] = {}
         total = 0
