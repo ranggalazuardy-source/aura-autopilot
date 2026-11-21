@@ -292,3 +292,22 @@ CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_expiry
     ON patch_approval_receipts(expires_at);
 CREATE INDEX IF NOT EXISTS idx_patch_approval_receipts_incident
     ON patch_approval_receipts(incident_id, created_at);
+
+
+-- Single-use repair runner execution requests; patch bytes remain private until claimed.
+CREATE TABLE IF NOT EXISTS repair_execution_requests (
+    id TEXT PRIMARY KEY CHECK(length(id) = 32),
+    incident_id TEXT NOT NULL,
+    base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
+    patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
+    patch_text TEXT NOT NULL CHECK(length(patch_text) BETWEEN 1 AND 256000),
+    approved_paths_json TEXT NOT NULL CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
+    approval_receipt_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','claimed','expired','blocked')),
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    claimed_at INTEGER,
+    CHECK(expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS idx_repair_execution_requests_status_expiry
+    ON repair_execution_requests(status, expires_at);
