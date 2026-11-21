@@ -43,3 +43,6 @@ For each incident:
 ## Current implementation boundary
 
 The deployed monitor can record runtime incidents, expose heartbeats, and safely reclaim expired task leases. GitHub Actions can retry a failed quality run once and open an incident ticket after persistent failure. This repository does not yet have an approved autonomous code-generation runtime or a verified patch executor. Therefore arbitrary code bugs are diagnosed/escalated, not silently rewritten. This is intentional until the owner enables a provider and approves its data-processing and quota policy.
+
+
+Implementation wording: create isolated branches and draft pull request artifacts only after an owner-approved code-generation provider is configured.
