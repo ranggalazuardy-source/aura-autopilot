@@ -35,6 +35,67 @@ class PatchContentPolicyTests(unittest.TestCase):
         self.assertFalse(result.allowed)
         self.assertIn("change_count_mismatch:tests/test_demo.py", result.reasons)
 
+    def test_hunk_header_old_line_count_must_match_body(self):
+        diff = (
+            "diff --git a/tests/test_demo.py b/tests/test_demo.py\n"
+            "--- a/tests/test_demo.py\n"
+            "+++ b/tests/test_demo.py\n"
+            "@@ -1,2 +1,2 @@\n"
+            " old\n"
+            "+new\n"
+        )
+        result = evaluate_unified_diff(
+            diff, [ChangedFile("tests/test_demo.py", "modified", 1, 0, 1)]
+        )
+        self.assertFalse(result.allowed)
+        self.assertIn("hunk_line_count_mismatch:tests/test_demo.py", result.reasons)
+
+    def test_hunk_header_new_line_count_cannot_be_exceeded(self):
+        diff = (
+            "diff --git a/tests/test_demo.py b/tests/test_demo.py\n"
+            "--- a/tests/test_demo.py\n"
+            "+++ b/tests/test_demo.py\n"
+            "@@ -1 +1 @@\n"
+            " old\n"
+            "+new\n"
+        )
+        result = evaluate_unified_diff(
+            diff, [ChangedFile("tests/test_demo.py", "modified", 1, 0, 1)]
+        )
+        self.assertFalse(result.allowed)
+        self.assertIn("hunk_line_count_exceeded:tests/test_demo.py", result.reasons)
+
+    def test_multiple_hunks_are_counted_independently(self):
+        diff = (
+            "diff --git a/tests/test_demo.py b/tests/test_demo.py\n"
+            "--- a/tests/test_demo.py\n"
+            "+++ b/tests/test_demo.py\n"
+            "@@ -1,2 +1,2 @@ first\n"
+            " keep\n"
+            "-old\n"
+            "+new\n"
+            "@@ -10 +10,2 @@ second\n"
+            " tail\n"
+            "+extra\n"
+        )
+        result = evaluate_unified_diff(
+            diff, [ChangedFile("tests/test_demo.py", "modified", 2, 1, 3)]
+        )
+        self.assertTrue(result.allowed)
+
+    def test_zero_count_hunk_is_supported(self):
+        diff = (
+            "diff --git a/tests/test_demo.py b/tests/test_demo.py\n"
+            "--- a/tests/test_demo.py\n"
+            "+++ b/tests/test_demo.py\n"
+            "@@ -0,0 +1,1 @@\n"
+            "+first\n"
+        )
+        result = evaluate_unified_diff(
+            diff, [ChangedFile("tests/test_demo.py", "modified", 1, 0, 1)]
+        )
+        self.assertTrue(result.allowed)
+
     def test_path_mismatch_and_unlisted_file_are_rejected(self):
         diff = (
             "diff --git a/tests/a.py b/tests/a.py\n"
