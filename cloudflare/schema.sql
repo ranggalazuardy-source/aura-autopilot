@@ -262,6 +262,28 @@ CREATE TABLE IF NOT EXISTS operational_incidents (
 );
 CREATE INDEX IF NOT EXISTS idx_operational_incidents_status ON operational_incidents(status, last_seen_at);
 
+-- Sanitized provenance for CI/runtime incidents; never stores raw logs or secrets.
+CREATE TABLE IF NOT EXISTS operational_incident_evidence (
+    incident_id TEXT PRIMARY KEY,
+    repository TEXT NOT NULL CHECK(repository = 'ranggalazuardy-source/aura-autopilot'),
+    workflow_name TEXT NOT NULL,
+    workflow_run_id INTEGER NOT NULL CHECK(workflow_run_id > 0),
+    run_attempt INTEGER NOT NULL CHECK(run_attempt > 0),
+    run_url TEXT NOT NULL,
+    head_branch TEXT NOT NULL,
+    head_sha TEXT NOT NULL CHECK(length(head_sha) = 40),
+    conclusion TEXT NOT NULL CHECK(conclusion = 'failure'),
+    failed_jobs_json TEXT NOT NULL CHECK(json_valid(failed_jobs_json) AND json_type(failed_jobs_json) = 'array'),
+    triage_category TEXT NOT NULL DEFAULT 'unclassified' CHECK(triage_category = 'unclassified'),
+    candidate_paths_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(candidate_paths_json) AND json_type(candidate_paths_json) = 'array'),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(incident_id) REFERENCES operational_incidents(id) ON DELETE CASCADE,
+    UNIQUE(repository, workflow_run_id, run_attempt)
+);
+CREATE INDEX IF NOT EXISTS idx_operational_incident_evidence_created
+    ON operational_incident_evidence(created_at);
+
+
 CREATE TABLE IF NOT EXISTS operational_heartbeats (
     id TEXT PRIMARY KEY,
     scheduled_at TEXT NOT NULL,
