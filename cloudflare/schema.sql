@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS patch_approval_receipts (
     incident_id TEXT NOT NULL,
     base_sha TEXT NOT NULL CHECK(length(base_sha) = 40),
     patch_sha256 TEXT NOT NULL CHECK(length(patch_sha256) = 64),
-    approved_paths_json TEXT NOT NULL,
+    approved_paths_json TEXT NOT NULL CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
     expires_at INTEGER NOT NULL,
     revoked_at INTEGER,
     consumed_at INTEGER,
