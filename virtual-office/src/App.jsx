@@ -177,7 +177,7 @@ export default function App() {
     <ProviderStatus provider={data?.runtime?.provider} />
     <section className="office-layout">
       <div className="scene-panel">
-        <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Agency floor · 6 divisions</h2></div><span className="scene-hint">Drag to orbit · Scroll to zoom · Select an agent</span></div>
+        <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Six division rooms · Central meeting room</h2></div><span className="scene-hint">Orbit · Zoom · Select an agent</span></div>
         {data ? <OfficeScene agents={agents} selectedAgent={selected?.name || selectedAgent} onSelectAgent={setSelectedAgent} /> : <div className="scene-loading">Waiting for authenticated office telemetry…</div>}
         <div className="scene-legend"><span><i className="legend-dot working" /> Working</span><span><i className="legend-dot waiting" /> Waiting for input</span><span><i className="legend-dot idle" /> Idle</span></div>
         <div className="runtime-note">{data?.runtime?.model_provider_enabled ? "Model provider enabled" : "Model inference disabled"}<span> · {data?.runtime?.background_scheduler_enabled ? "Scheduler enabled" : "No background scheduler"}</span></div>
