@@ -16,7 +16,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from workers import asgi, handler
 from app.services.patch_approval_issuer import issue_patch_approval_receipt
 
@@ -190,7 +190,7 @@ class PatchApprovalReceiptIn(BaseModel):
     patch_sha256: str = Field(min_length=64, max_length=64)
     approved_paths: list[str] = Field(min_length=1, max_length=6)
     ttl_seconds: int = Field(default=300, ge=1, le=600)
-    confirm_owner_approval: bool
+    confirm_owner_approval: StrictBool
 
 
 class OpportunityIn(BaseModel):
