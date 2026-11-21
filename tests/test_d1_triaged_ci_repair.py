@@ -92,7 +92,7 @@ class D1TriagedRepairTests(unittest.IsolatedAsyncioTestCase):
 
             def read_file(self, path, *, ref):
                 self.calls.append((path, ref))
-                return "def example():\\n    return 1\\n"
+                return "def example():\n    return 1\n"
 
         class ModelInvoker:
             def __init__(self):
@@ -102,13 +102,13 @@ class D1TriagedRepairTests(unittest.IsolatedAsyncioTestCase):
                 self.prompt = prompt
                 return json.dumps({
                     "unified_diff": (
-                        "diff --git a/app/agents/example.py b/app/agents/example.py\\n"
-                        "index 1111111..2222222 100644\\n"
-                        "--- a/app/agents/example.py\\n"
-                        "+++ b/app/agents/example.py\\n"
-                        "@@ -1 +1,2 @@\\n"
-                        " old_value\\n"
-                        "+new_value\\n"
+                        "diff --git a/app/agents/example.py b/app/agents/example.py\n"
+                        "index 1111111..2222222 100644\n"
+                        "--- a/app/agents/example.py\n"
+                        "+++ b/app/agents/example.py\n"
+                        "@@ -1 +1,2 @@\n"
+                        " old_value\n"
+                        "+new_value\n"
                     ),
                     "files": [{
                         "filename": "app/agents/example.py",
