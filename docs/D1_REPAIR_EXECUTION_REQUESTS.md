@@ -32,3 +32,10 @@ Configure these GitHub Actions secrets:
 Configure repository variable AURA_API_BASE_URL to the deployed AURA Worker base URL. The Cloudflare Worker also needs the separate AURA_REPAIR_RUNNER_SECRET secret. Do not reuse AURA_API_KEY as the runner key.
 
 The workflow is intentionally manual-dispatch at this stage. The request store and authenticated endpoints are implemented, but automatic dispatch from the incident/repair pipeline is not yet connected. No live D1 migration or repository secrets were changed by this code-only PR update. The GitHub App token is not created in the validation job and is not available to patch tests.
+
+
+## Automatic queue pickup
+
+The guarded runner workflow now has a five-minute scheduled trigger. Its first, read-only job calls POST /repair/runner/next with the dedicated runner secret. D1 atomically reserves the oldest unexpired queued request by changing its status to dispatched and returns only request ID, base SHA, and expiry; it does not return patch bytes. The later validation job retrieves the exact patch once through the authenticated patch endpoint. A single workflow-level concurrency group prevents overlapping queue pollers from reserving work simultaneously.
+
+A manual workflow_dispatch override remains available for an explicitly supplied request ID/base SHA/expiry. If the queue is empty, downstream validation and publish jobs are skipped. The workflow is not active on the default branch until the PR is merged, and production still requires the owner to configure the runner secret, API base URL, and repository-scoped GitHub App credentials.
