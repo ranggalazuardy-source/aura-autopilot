@@ -58,6 +58,7 @@ class TriagedCIRepairTests(unittest.TestCase):
         self.assertEqual(result.status, "ready_for_owner_approval")
         self.assertEqual(generator.calls, 1)
         self.assertEqual(generator.received["candidate_paths"], ["app/agents/example.py"])
+        self.assertEqual(generator.received["base_sha"], BASE)
         self.assertNotIn("run_url", generator.received)
         self.assertNotIn("failed_jobs_json", generator.received)
         self.assertTrue(result.requires_owner_approval)
