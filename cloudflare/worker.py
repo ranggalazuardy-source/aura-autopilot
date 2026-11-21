@@ -305,6 +305,14 @@ class RepairIncidentGenerateIn(BaseModel):
     confirm_provider_inference: StrictBool
 
 
+class RepairProposalApprovalIn(BaseModel):
+    confirm_owner_approval: StrictBool
+
+
+class RepairProposalQueueIn(BaseModel):
+    confirm_owner_queue: StrictBool
+
+
 class OpportunityScoreIn(BaseModel):
     demand: int = Field(ge=1, le=5)
     competition: int = Field(ge=1, le=5)
