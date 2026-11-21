@@ -9,7 +9,10 @@ from collections.abc import Iterable
 from app.patch_policy import ChangedFile, PatchDecision, evaluate_patch
 
 
-_HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@(?: .*)?$")
+_HUNK_HEADER = re.compile(
+    r"^@@ -(?P<old_start>\\d+)(?:,(?P<old_count>\\d+))? "
+    r"\\+(?P<new_start>\\d+)(?:,(?P<new_count>\\d+))? @@(?: .*)?$"
+)
 
 
 def evaluate_unified_diff(
@@ -42,7 +45,7 @@ def evaluate_unified_diff(
     if len(blocks) != len(items):
         reasons.append("file_count_mismatch")
 
-    metadata_by_path = {item.filename.replace("\\", "/"): item for item in items}
+    metadata_by_path = {item.filename.replace("\\\\", "/"): item for item in items}
     seen: set[str] = set()
 
     for block in blocks:
@@ -58,7 +61,7 @@ def evaluate_unified_diff(
         if old_path != new_path:
             reasons.append("path_change_not_allowed")
             continue
-        path = new_path.replace("\\", "/")
+        path = new_path.replace("\\\\", "/")
         if path in seen:
             reasons.append("duplicate_diff_file")
         seen.add(path)
@@ -83,27 +86,53 @@ def evaluate_unified_diff(
 
         additions = 0
         deletions = 0
-        in_hunk = False
         hunk_seen = False
+        in_hunk = False
+        old_consumed = 0
+        new_consumed = 0
+        old_expected = 0
+        new_expected = 0
+
+        def finish_hunk() -> None:
+            if old_consumed != old_expected or new_consumed != new_expected:
+                reasons.append(f"hunk_line_count_mismatch:{path}")
+
         for line in file_lines:
             if line.startswith("@@"):
+                if in_hunk:
+                    finish_hunk()
                 hunk_seen = True
                 in_hunk = True
-                if not _HUNK_HEADER.match(line):
+                match = _HUNK_HEADER.match(line)
+                if not match:
                     reasons.append(f"malformed_hunk_header:{path}")
+                    old_expected = new_expected = 0
+                else:
+                    old_expected = int(match.group("old_count") or "1")
+                    new_expected = int(match.group("new_count") or "1")
+                old_consumed = 0
+                new_consumed = 0
                 continue
             if not in_hunk:
                 continue
             if line.startswith("+"):
                 additions += 1
+                new_consumed += 1
             elif line.startswith("-"):
                 deletions += 1
+                old_consumed += 1
             elif line.startswith(" "):
-                continue
-            elif line.startswith("\\"):
+                old_consumed += 1
+                new_consumed += 1
+            elif line.startswith("\\\\"):
                 continue
             else:
                 reasons.append(f"invalid_hunk_line:{path}")
+                continue
+            if old_consumed > old_expected or new_consumed > new_expected:
+                reasons.append(f"hunk_line_count_exceeded:{path}")
+        if in_hunk:
+            finish_hunk()
         if not hunk_seen:
             reasons.append(f"missing_hunks:{path}")
 
