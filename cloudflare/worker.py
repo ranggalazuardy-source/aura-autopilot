@@ -301,6 +301,10 @@ class RepairIncidentTriageIn(BaseModel):
     confirm_owner_triage: StrictBool
 
 
+class RepairSelfTestIn(BaseModel):
+    confirm_owner_self_test: StrictBool
+
+
 class RepairIncidentGenerateIn(BaseModel):
     confirm_owner_generation: StrictBool
     confirm_provider_inference: StrictBool
@@ -2361,6 +2365,28 @@ async def ingest_ci_incident(payload: CIIncidentIntakeIn, db=Depends(get_db)):
     }
 
 
+@app.post("/repair/self-test", dependencies=[Depends(require_api_key)])
+async def create_repair_self_test(payload: RepairSelfTestIn, db=Depends(get_db)):
+    """Create one clearly labeled, no-cost console test incident; never creates GitHub data or repair work."""
+    if payload.confirm_owner_self_test is not True:
+        raise HTTPException(400, "Explicit owner self-test confirmation is required")
+    fingerprint = "self_test:repair_console:v1"
+    incident_id = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    timestamp = now_iso()
+    await db.prepare(
+        """INSERT INTO operational_incidents
+        (id, fingerprint, source, severity, summary, status, occurrence_count, first_seen_at, last_seen_at)
+        VALUES (?, ?, 'self_test', 'low', 'SELF-TEST · Console storage and triage validation', 'open', 1, ?, ?)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          status = 'open', last_seen_at = excluded.last_seen_at,
+          summary = excluded.summary"""
+    ).bind(incident_id, fingerprint, timestamp, timestamp).run()
+    await write_audit(db, "operational.repair_console_self_test_created", incident_id,
+                      "D1-only test record; no GitHub issue, model call, patch, or runner request")
+    return {"incident_id": incident_id, "source": "self_test", "status": "open",
+            "repair_eligible": False, "proposal_created": False, "external_side_effects": False}
+
+
 @app.get("/repair/incidents", dependencies=[Depends(require_api_key)])
 async def list_repair_incidents(db=Depends(get_db)):
     """Owner-only view of sanitized CI incidents awaiting triage."""
@@ -2369,10 +2395,11 @@ async def list_repair_incidents(db=Depends(get_db)):
                   i.occurrence_count, i.first_seen_at, i.last_seen_at,
                   e.workflow_name, e.workflow_run_id, e.run_attempt, e.run_url,
                   e.head_branch, e.head_sha, e.failed_jobs_json,
-                  e.triage_category, e.candidate_paths_json, e.triage_owner
+                  e.triage_category, e.candidate_paths_json, e.triage_owner,
+                  CASE WHEN i.source = 'self_test' THEN 1 ELSE 0 END AS is_test
            FROM operational_incidents i
            LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
-           WHERE i.source = 'github_actions'
+           WHERE (i.source = 'github_actions' OR i.source = 'self_test')
            ORDER BY i.last_seen_at DESC LIMIT 50"""
     ).all()
     return d1_rows(result)
@@ -2386,11 +2413,28 @@ async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriage
     if payload.confirm_owner_triage is not True:
         raise HTTPException(400, "Explicit owner triage confirmation is required")
     row = await db.prepare(
-        """SELECT id FROM operational_incidents
-           WHERE id = ? AND source = 'github_actions' AND status IN ('open','investigating')"""
+        """SELECT id, source FROM operational_incidents
+           WHERE id = ? AND (source = 'github_actions' OR source = 'self_test')
+             AND status IN ('open','investigating')"""
     ).bind(incident_id).first()
     if not row:
         raise HTTPException(404, "Open CI incident not found")
+    if row.source == "self_test":
+        if payload.candidate_paths:
+            raise HTTPException(422, "Self-test incidents cannot carry repair candidate paths")
+        await db.prepare(
+            "UPDATE operational_incidents SET status = 'investigating', last_seen_at = ? WHERE id = ?"
+        ).bind(now_iso(), incident_id).run()
+        await write_audit(db, "operational.repair_console_self_test_triaged", incident_id,
+                          f"category={payload.category}; repair remains disabled")
+        return {
+            "incident_id": incident_id, "triage_category": payload.category,
+            "candidate_paths": [], "owner": "SELF_TEST",
+            "repair_eligible": False, "plan_status": "self_test_complete",
+            "reasons": ["Self-test records are permanently excluded from patch generation and runner execution."],
+            "requires_owner_approval": False, "patch_generated": False,
+            "files_written": False, "merged": False, "deployed": False,
+        }
     safe_categories = {"automated_test_regression", "python_syntax_or_import"}
     paths = payload.candidate_paths
     if len(paths) != len(set(paths)):
