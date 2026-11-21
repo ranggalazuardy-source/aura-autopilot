@@ -13,6 +13,8 @@ from typing import Protocol
 
 from app.patch_content_policy import evaluate_unified_diff
 from app.patch_policy import ChangedFile, evaluate_patch
+from app.repair_planner import RepairPlan, build_repair_plan
+from app.patch_executor import PatchApproval, PatchExecutionRequest
 from app.services.incident_repair_bridge import plan_from_incident
 
 
@@ -32,6 +34,8 @@ class RepairProposal:
     patch_text: str = ""
     patch_sha256: str = ""
     changed_paths: tuple[str, ...] = ()
+    changed_files: tuple[ChangedFile, ...] = ()
+    plan: RepairPlan | None = None
     reasons: tuple[str, ...] = ()
     requires_owner_approval: bool = True
     provider_invoked: bool = False
@@ -62,15 +66,22 @@ def prepare_repair_proposal(
     if generator is None or not callable(getattr(generator, "generate", None)):
         return RepairProposal("blocked", incident_id, base_sha, reasons=("patch_generator_unavailable",))
 
-    plan = plan_from_incident(incident)
-    if plan.get("status") != "ready_for_owner_approval":
+    plan_data = plan_from_incident(incident)
+    if plan_data.get("status") != "ready_for_owner_approval":
         return RepairProposal(
             "blocked", incident_id, base_sha,
-            reasons=tuple(str(item) for item in plan.get("reasons", ())),
+            reasons=tuple(str(item) for item in plan_data.get("reasons", ())),
         )
+    plan = build_repair_plan(
+        incident_id,
+        str(plan_data["category"]),
+        tuple(str(path) for path in plan_data["candidate_paths"]),
+    )
+    if plan.status != "ready_for_owner_approval":
+        return RepairProposal("blocked", incident_id, base_sha, reasons=plan.reasons)
 
     try:
-        generated = generator.generate(incident, plan)
+        generated = generator.generate(incident, plan_data)
     except Exception:
         return RepairProposal("blocked", incident_id, base_sha, reasons=("patch_generation_failed",))
     if not isinstance(generated, tuple) or len(generated) != 2:
@@ -87,8 +98,8 @@ def prepare_repair_proposal(
         reasons = tuple(dict.fromkeys((*metadata.reasons, *diff.reasons)))
         return RepairProposal("blocked", incident_id, base_sha, reasons=reasons or ("generated_patch_rejected",))
 
-    paths = tuple(sorted(item.filename.replace("\\", "/") for item in changed_files))
-    planned_paths = tuple(sorted(str(item).replace("\\", "/") for item in plan["candidate_paths"]))
+    paths = tuple(sorted(item.filename.replace("\\\\", "/") for item in changed_files))
+    planned_paths = tuple(sorted(plan.candidate_paths))
     if paths != planned_paths:
         return RepairProposal("blocked", incident_id, base_sha, reasons=("generated_paths_do_not_match_incident_plan",))
 
@@ -96,4 +107,37 @@ def prepare_repair_proposal(
     return RepairProposal(
         "ready_for_owner_approval", incident_id, base_sha,
         patch_text=patch_text, patch_sha256=digest, changed_paths=paths,
+        changed_files=changed_files, plan=plan,
+    )
+
+
+def build_execution_request(
+    proposal: RepairProposal,
+    approval: PatchApproval,
+) -> PatchExecutionRequest:
+    """Bind a validated proposal to a receipt for the existing guarded executor.
+
+    This only constructs an immutable request. D1 verification/consumption and
+    workspace side effects remain the responsibility of the async executor.
+    """
+    if not isinstance(proposal, RepairProposal) or proposal.status != "ready_for_owner_approval":
+        raise ValueError("repair proposal is not eligible for execution")
+    if proposal.plan is None or not proposal.patch_text or not proposal.changed_files:
+        raise ValueError("repair proposal is incomplete")
+    if not isinstance(approval, PatchApproval):
+        raise TypeError("approval must be a PatchApproval receipt")
+    if hashlib.sha256(proposal.patch_text.encode("utf-8")).hexdigest() != proposal.patch_sha256:
+        raise ValueError("repair proposal patch digest changed")
+    if approval.incident_id != proposal.incident_id or approval.base_sha != proposal.base_sha:
+        raise ValueError("approval receipt does not match the proposal")
+    if approval.patch_sha256 != proposal.patch_sha256:
+        raise ValueError("approval receipt patch digest does not match the proposal")
+    if tuple(sorted(approval.approved_paths)) != tuple(sorted(proposal.changed_paths)):
+        raise ValueError("approval receipt paths do not match the proposal")
+    return PatchExecutionRequest(
+        plan=proposal.plan,
+        patch_text=proposal.patch_text,
+        changed_files=proposal.changed_files,
+        base_sha=proposal.base_sha,
+        approval=approval,
     )
