@@ -39,6 +39,40 @@ class PatchPolicyTests(unittest.TestCase):
                     ChangedFile("tests/test_new.py", status, 1, 0, 1)
                 ]).allowed)
 
+
+    def test_malformed_metadata_types_fail_closed(self):
+        for changed in (
+            ChangedFile("tests/test_bad.py", "modified", True, 0, 1),
+            ChangedFile("tests/test_bad.py", "modified", 1, 0, 3),
+            ChangedFile(None, "modified", 1, 0, 1),
+        ):
+            with self.subTest(changed=changed):
+                result = evaluate_patch([changed])
+                self.assertFalse(result.allowed)
+
+    def test_windows_absolute_and_null_byte_paths_are_rejected(self):
+        for path in (
+            "C:/workspace/tests/test_bad.py",
+            "\\\\server\\share\\tests\\test_bad.py",
+            "tests/test_bad.py\\x00.py",
+        ):
+            with self.subTest(path=path):
+                result = evaluate_patch([
+                    ChangedFile(path, "modified", 1, 0, 1)
+                ])
+                self.assertFalse(result.allowed)
+
+    def test_path_prefix_lookalikes_are_not_allowed(self):
+        for path in (
+            "tests-evil/test_bad.py",
+            "app/agents-evil/test_bad.py",
+            "docs_private/notes.md",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(evaluate_patch([
+                    ChangedFile(path, "modified", 1, 0, 1)
+                ]).allowed)
+
     def test_change_size_limits_are_enforced(self):
         self.assertFalse(evaluate_patch([
             ChangedFile("docs/repair.md", "modified", 401, 0, 401)
