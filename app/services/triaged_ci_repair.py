@@ -92,6 +92,7 @@ def prepare_triaged_ci_incident_repair(
         "source": "github_actions",
         "owner": "IT_AI_ENGINEER",
         "category": evidence["triage_category"],
+        "base_sha": base_sha,
         "candidate_paths": candidate_paths,
     }
     return prepare_it_engineer_repair(
