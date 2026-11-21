@@ -109,14 +109,13 @@ class IsolatedGitWorktree:
         return True
 
     def cleanup(self) -> None:
-        if self.path is None:
-            return
-        path = self.path
-        branch = self.branch
-        self._run(["git", "worktree", "remove", "--force", str(path)], cwd=self.repository)
-        self.path = None
-        if branch is not None:
-            if not _BRANCH.fullmatch(branch):
+        # Keep each resource's state until its own deletion succeeds. If branch
+        # deletion fails after worktree removal, a later cleanup() can retry it.
+        if self.path is not None:
+            self._run(["git", "worktree", "remove", "--force", str(self.path)], cwd=self.repository)
+            self.path = None
+        if self.branch is not None:
+            if not _BRANCH.fullmatch(self.branch):
                 raise GitWorktreeError("refusing to delete a branch outside the repair namespace")
-            self._run(["git", "branch", "-D", "--", branch], cwd=self.repository)
-        self.branch = None
+            self._run(["git", "branch", "-D", "--", self.branch], cwd=self.repository)
+            self.branch = None
