@@ -19,7 +19,7 @@ This is an orchestration contract, not yet a production-connected executor. The 
 
 Before wiring a production adapter, it must:
 
-- Verify approval receipts against trusted server-side storage, including owner identity, expiry, revocation, one-time use, incident, base SHA, patch digest, and exact approved paths.
+- Implement `ApprovalVerifier.verify_and_consume` against trusted server-side storage. Verification and one-time consumption must be atomic, and must enforce owner identity, expiry, revocation, incident, base SHA, patch digest, and exact approved paths. A consumed receipt cannot be replayed, including by concurrent executions.
 - Create branches only from the exact approved base SHA and never target main for file writes.
 - Apply the exact diff whose digest was approved; do not regenerate or normalize it after approval.
 - Run the repository quality workflow in an isolated environment with least-privilege credentials.
@@ -33,7 +33,7 @@ The adapter must fail closed on unavailable approval storage, stale base commits
 - No AI code-generation provider is called; inference remains disabled.
 - No concrete GitHub/worktree adapter is connected.
 - No patch has been applied to a real repository worktree by this module.
-- The unit tests use fake adapters and prove orchestration order and blocked paths, not live GitHub execution. Malformed request data and adapter exceptions fail closed; no later stage is called after a failed stage.
+- The unit tests use fake adapters and prove orchestration order, single-use approval behavior, and blocked paths, not live GitHub execution. The verifier contract now requires atomic verify-and-consume semantics; a concrete transactional store is still not connected. Malformed request data and adapter exceptions fail closed; no later stage is called after a failed stage.
 - A failed branch operation, patch application, or test run returns a fail-closed result and never creates a draft PR. A partially created isolated branch is left for inspection; no automatic cleanup is performed.
 - Human review remains mandatory. Draft PR creation is not merge or deployment authorization.
 
