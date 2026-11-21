@@ -41,9 +41,9 @@ class RepairIncidentIntakeTests(unittest.TestCase):
 
     def test_incident_remains_unclassified_and_not_repair_eligible(self):
         source = ast.unparse(self.function("ingest_ci_incident"))
-        self.assertIn('"unclassified"', source)
-        self.assertIn('"candidate_paths": []', source)
-        self.assertIn('"repair_eligible": False', source)
+        self.assertIn("'unclassified'", source)
+        self.assertIn("'candidate_paths': []", source)
+        self.assertIn("'repair_eligible': False", source)
         self.assertNotIn("prepare_it_engineer_repair", source)
         self.assertNotIn("patch_text", source)
 
