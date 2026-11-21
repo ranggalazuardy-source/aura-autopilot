@@ -56,3 +56,8 @@ The Worker has Cloudflare Workers AI, Groq and Gemini adapters with ordered fail
 - Cohere trial rate limits: https://docs.cohere.com/docs/rate-limits
 - Mistral usage and API activation: https://docs.mistral.ai/admin/billing-usage/usage-limits
 - Cerebras pricing: https://www.cerebras.ai/pricing
+
+
+## Provider credential provisioning
+
+The manual Cloudflare deployment workflow requires the GitHub repository secrets `GROQ_API_KEY` and `GEMINI_API_KEY`, then writes them directly to the Worker using Wrangler secret input. Values are never written to source files or printed in workflow output. The existing `AURA_GROQ_ENABLED`, `AURA_GEMINI_ENABLED`, `AURA_GROQ_FREE_TIER_CONFIRMED`, `AURA_GEMINI_FREE_TIER_CONFIRMED`, and `AURA_MODEL_ENABLED` variables remain false by default. Provisioning credentials does not enable inference, invoke a provider, or authorize paid usage. The deploy workflow is still a manual, owner-initiated production action.
