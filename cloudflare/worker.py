@@ -308,7 +308,7 @@ class RepairSelfTestIn(BaseModel):
 class RepairIncidentResolutionIn(BaseModel):
     verification_run_id: int = Field(gt=0)
     verification_commit_sha: str = Field(pattern="^[0-9a-f]{40}$")
-    resolution_note: str = Field(min_length=10, max_length=1000)
+    resolution_note: str = Field(min_length=10, max_length=300)
     confirm_owner_resolution: StrictBool
 
 
