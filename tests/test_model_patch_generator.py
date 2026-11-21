@@ -51,7 +51,7 @@ class BoundedModelPatchGeneratorTests(unittest.TestCase):
         return value
 
     def plan(self, paths=None):
-        return {"candidate_paths": paths or ["app/agents/example.py"]}
+        return {"candidate_paths": ["app/agents/example.py"] if paths is None else paths}
 
     def response(self, patch=PATCH, files=None):
         return json.dumps({
