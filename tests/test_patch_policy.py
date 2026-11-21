@@ -54,7 +54,7 @@ class PatchPolicyTests(unittest.TestCase):
         for path in (
             "C:/workspace/tests/test_bad.py",
             "\\\\server\\share\\tests\\test_bad.py",
-            "tests/test_bad.py\\x00.py",
+            "tests/test_bad.py\x00.py",
         ):
             with self.subTest(path=path):
                 result = evaluate_patch([
