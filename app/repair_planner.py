@@ -21,21 +21,9 @@ BLOCKED_CATEGORIES = {
 }
 ALLOWED_PREFIXES = ("app/agents/", "app/services/", "tests/", "docs/")
 BLOCKED_PATH_COMPONENTS = {
-    "auth",
-    "authentication",
-    "authorization",
-    "security",
-    "billing",
-    "payment",
-    "payments",
-    "provider",
-    "providers",
-    "secret",
-    "secrets",
-    "ledger",
-    "database",
-    "db",
-    "config",
+    "auth", "authentication", "authorization", "security",
+    "billing", "payment", "payments", "provider", "providers",
+    "secret", "secrets", "ledger", "database", "db", "config",
     "configuration",
 }
 MAX_CANDIDATE_PATHS = 6
@@ -81,11 +69,16 @@ def build_repair_plan(
         normalized = path.replace("\\", "/")
         normalized_paths.append(normalized)
         components = [part.lower() for part in normalized.split("/") if part]
+        stems = [part.split(".", 1)[0] for part in components]
         if normalized.startswith("/") or ".." in components:
             reasons.append(f"unsafe_candidate_path:{normalized}")
         if not normalized.startswith(ALLOWED_PREFIXES):
             reasons.append(f"path_outside_allowlist:{normalized}")
-        if any(part in BLOCKED_PATH_COMPONENTS for part in components):
+        if any(
+            stem in BLOCKED_PATH_COMPONENTS
+            or any(stem.startswith(f"{blocked}_") for blocked in BLOCKED_PATH_COMPONENTS)
+            for stem in stems
+        ):
             reasons.append(f"sensitive_path_requires_manual_triage:{normalized}")
 
     status = "blocked" if reasons else "ready_for_owner_approval"
