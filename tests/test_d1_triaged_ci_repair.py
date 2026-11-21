@@ -83,6 +83,54 @@ class D1TriagedRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("INNER JOIN operational_incident_evidence", db.sql)
         self.assertIn("i.status", db.sql)
 
+    async def test_d1_to_bounded_generator_produces_validated_proposal(self):
+        from app.services.model_patch_generator import BoundedModelPatchGenerator
+
+        class SourceReader:
+            def __init__(self):
+                self.calls = []
+
+            def read_file(self, path, *, ref):
+                self.calls.append((path, ref))
+                return "def example():\\n    return 1\\n"
+
+        class ModelInvoker:
+            def __init__(self):
+                self.prompt = None
+
+            def __call__(self, prompt):
+                self.prompt = prompt
+                return json.dumps({
+                    "unified_diff": (
+                        "diff --git a/app/agents/example.py b/app/agents/example.py\\n"
+                        "index 1111111..2222222 100644\\n"
+                        "--- a/app/agents/example.py\\n"
+                        "+++ b/app/agents/example.py\\n"
+                        "@@ -1 +1,2 @@\\n"
+                        " old_value\\n"
+                        "+new_value\\n"
+                    ),
+                    "files": [{
+                        "filename": "app/agents/example.py",
+                        "additions": 1,
+                        "deletions": 0,
+                    }],
+                })
+
+        reader, model = SourceReader(), ModelInvoker()
+        generator = BoundedModelPatchGenerator(source_reader=reader, invoke_model=model)
+        result = await prepare_triaged_ci_repair_from_d1(
+            FakeD1(self.row()), "c" * 24, generator=generator,
+            confirm_owner_generation=True, provider_inference_approved=True,
+        )
+        self.assertEqual(result.status, "ready_for_owner_approval")
+        self.assertEqual(reader.calls, [("app/agents/example.py", BASE)])
+        self.assertIn(BASE, model.prompt)
+        self.assertEqual(result.changed_paths, ("app/agents/example.py",))
+        self.assertTrue(result.requires_owner_approval)
+        self.assertFalse(result.files_written)
+        self.assertFalse(result.github_written)
+
     async def test_missing_evidence_fails_before_generator(self):
         generator = FakeGenerator()
         result = await prepare_triaged_ci_repair_from_d1(
