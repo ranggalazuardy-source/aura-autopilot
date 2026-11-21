@@ -19,7 +19,7 @@ class RepairIncidentIntakeTests(unittest.TestCase):
     def test_intake_route_requires_owner_api_key(self):
         route = self.function("ingest_ci_incident")
         decorator = ast.unparse(route.decorator_list[0])
-        self.assertIn('"/repair/incidents"', decorator)
+        self.assertIn("/repair/incidents", decorator)
         self.assertIn("Depends(require_api_key)", decorator)
 
     def test_intake_accepts_only_fixed_repository_and_known_workflows(self):
