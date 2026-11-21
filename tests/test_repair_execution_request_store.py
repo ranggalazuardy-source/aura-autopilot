@@ -16,6 +16,7 @@ class FakeStatement:
 
     async def run(self):
         self.db.inserted = self.values
+        self.db.last_sql = self.sql
         return {}
 
     async def first(self):
@@ -36,6 +37,7 @@ class FakeD1:
     def __init__(self):
         self.rows = {}
         self.inserted = None
+        self.last_sql = ""
 
     def prepare(self, sql):
         return FakeStatement(self, sql)
@@ -56,7 +58,7 @@ class ExecutionRequestStoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["patch_sha256"], hashlib.sha256(
             b"diff --git a/app/services/a.py b/app/services/a.py\n"
         ).hexdigest())
-        self.assertIn("UPDATE repair_execution_requests", FakeStatement(db, "").sql)
+        self.assertIn("INSERT INTO repair_execution_requests", db.last_sql)
 
     async def test_claim_is_single_use_and_returns_verified_patch(self):
         db = FakeD1()
