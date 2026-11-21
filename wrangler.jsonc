@@ -8,7 +8,7 @@
   ],
   "workers_dev": true,
   "vars": {
-    "AURA_SCHEDULER_ENABLED": "false",
+    "AURA_SCHEDULER_ENABLED": "true",
     "AURA_MODEL_ENABLED": "false",
     "AURA_GROQ_ENABLED": "false",
     "AURA_CLOUDFLARE_FREE_PLAN_CONFIRMED": "false",
