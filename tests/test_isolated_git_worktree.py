@@ -18,6 +18,7 @@ class IsolatedGitWorktreeTests(unittest.TestCase):
         target = self.repo / "app" / "services" / "sample.py"
         target.parent.mkdir(parents=True)
         target.write_text("VALUE = 1\n", encoding="utf-8")
+        (self.repo / "README.md").write_text("old\n", encoding="utf-8")
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(["git", "commit", "-m", "initial"], cwd=self.repo, check=True, capture_output=True)
         self.base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True, capture_output=True, text=True).stdout.strip()
