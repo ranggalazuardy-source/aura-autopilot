@@ -113,6 +113,20 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Atomically consume owner receipt after quality PASS
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          RUNNER_SECRET: ${{ secrets.AURA_REPAIR_RUNNER_SECRET }}
+          API_BASE: ${{ vars.AURA_API_BASE_URL }}
+        run: |
+          curl --fail --silent --show-error -X POST \
+            -H "X-AURA-Runner-Key: $RUNNER_SECRET" \
+            "$API_BASE/repair/runner/$REQUEST_ID/authorize-write" -o /tmp/repair-authorized.json
+          python - <<'PY'
+          import json, pathlib
+          result=json.loads(pathlib.Path("/tmp/repair-authorized.json").read_text())
+          assert result["owner_approval"] == "consumed" and result["write_token_eligible"] is True
+          PY
       - name: Mint narrowly scoped GitHub App token after quality PASS
         id: app-token
         uses: actions/create-github-app-token@v2
