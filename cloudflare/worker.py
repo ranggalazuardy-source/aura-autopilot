@@ -305,6 +305,13 @@ class RepairSelfTestIn(BaseModel):
     confirm_owner_self_test: StrictBool
 
 
+class RepairIncidentResolutionIn(BaseModel):
+    verification_run_id: int = Field(gt=0)
+    verification_commit_sha: str = Field(pattern="^[0-9a-f]{40}$")
+    resolution_note: str = Field(min_length=10, max_length=300)
+    confirm_owner_resolution: StrictBool
+
+
 class RepairIncidentGenerateIn(BaseModel):
     confirm_owner_generation: StrictBool
     confirm_provider_inference: StrictBool
@@ -2477,6 +2484,118 @@ async def triage_repair_incident(incident_id: str, payload: RepairIncidentTriage
         "requires_owner_approval": True,
         "patch_generated": False,
         "files_written": False,
+        "merged": False,
+        "deployed": False,
+    }
+
+
+
+@app.post("/repair/incidents/{incident_id}/resolve", dependencies=[Depends(require_api_key)])
+async def resolve_repair_incident(incident_id: str, payload: RepairIncidentResolutionIn, db=Depends(get_db)):
+    """Resolve a real CI incident only after verifying immutable successful GitHub Actions evidence."""
+    if not re.fullmatch(r"[0-9a-f]{24}", incident_id):
+        raise HTTPException(404, "Incident not found")
+    if payload.confirm_owner_resolution is not True:
+        raise HTTPException(400, "Explicit owner resolution confirmation is required")
+    note = payload.resolution_note.strip()
+    if len(note) < 10 or "\x00" in note:
+        raise HTTPException(422, "Resolution note must contain 10-300 safe characters")
+
+    incident = await db.prepare(
+        """SELECT i.id, i.source, i.status, i.last_seen_at,
+                  e.repository, e.workflow_name, e.workflow_run_id, e.run_attempt,
+                  e.head_sha, e.conclusion
+           FROM operational_incidents i
+           LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
+           WHERE i.id = ?"""
+    ).bind(incident_id).first()
+    if not incident or incident.source != "github_actions":
+        raise HTTPException(404, "Resolvable GitHub Actions incident not found")
+    if incident.status not in ("open", "investigating"):
+        raise HTTPException(409, "Incident is already resolved or closed")
+    if incident.repository != "ranggalazuardy-source/aura-autopilot" or not incident.workflow_name:
+        raise HTTPException(409, "Incident evidence is incomplete or outside the allowed repository")
+
+    import httpx
+    verification_url = (
+        "https://api.github.com/repos/ranggalazuardy-source/aura-autopilot/actions/runs/"
+        + str(payload.verification_run_id)
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            response = await client.get(
+                verification_url,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "AURA-Incident-Resolver"},
+            )
+    except Exception as exc:
+        raise HTTPException(502, "GitHub verification service is unavailable") from exc
+    if response.status_code == 404:
+        raise HTTPException(422, "Verification workflow run does not exist")
+    if response.status_code == 403 or response.status_code == 429:
+        raise HTTPException(503, "GitHub verification rate limit reached; retry later")
+    if response.status_code != 200:
+        raise HTTPException(502, "GitHub verification could not be completed")
+    try:
+        verified_run = response.json()
+    except Exception as exc:
+        raise HTTPException(502, "GitHub returned invalid verification data") from exc
+
+    repository = (verified_run.get("repository") or {}).get("full_name")
+    if repository != incident.repository:
+        raise HTTPException(422, "Verification run belongs to a different repository")
+    if verified_run.get("name") != incident.workflow_name:
+        raise HTTPException(422, "Verification run uses a different workflow")
+    if verified_run.get("status") != "completed" or verified_run.get("conclusion") != "success":
+        raise HTTPException(422, "Verification run must be completed successfully")
+    if verified_run.get("head_sha") != payload.verification_commit_sha:
+        raise HTTPException(422, "Verification commit SHA does not match the GitHub run")
+    if int(verified_run.get("id") or 0) != payload.verification_run_id:
+        raise HTTPException(422, "Verification run ID does not match the GitHub response")
+
+    verified_url = verified_run.get("html_url") or verification_url
+    verified_attempt = int(verified_run.get("run_attempt") or 1)
+    now = now_iso()
+    updated = await db.prepare(
+        """UPDATE operational_incidents
+           SET status = 'resolved', resolved_at = ?, last_seen_at = ?
+           WHERE id = ? AND source = 'github_actions'
+             AND status IN ('open','investigating')
+           RETURNING id"""
+    ).bind(now, now, incident_id).first()
+    if not updated:
+        raise HTTPException(409, "Incident was resolved by another request")
+    await write_audit(
+        db, "operational.incident_resolved", incident_id,
+        json.dumps({
+            "actor": "authenticated_owner",
+            "resolution_note": note,
+            "verification_repository": repository,
+            "verification_workflow": incident.workflow_name,
+            "verification_run_id": payload.verification_run_id,
+            "verification_run_attempt": verified_attempt,
+            "verification_run_url": verified_url,
+            "verification_commit_sha": payload.verification_commit_sha,
+            "verified_conclusion": "success",
+            "resolved_at": now,
+        }, separators=(",", ":"), ensure_ascii=False),
+    )
+    return {
+        "incident_id": incident_id,
+        "status": "resolved",
+        "resolved_at": now,
+        "verification": {
+            "repository": repository,
+            "workflow_name": incident.workflow_name,
+            "run_id": payload.verification_run_id,
+            "run_attempt": verified_attempt,
+            "run_url": verified_url,
+            "commit_sha": payload.verification_commit_sha,
+            "conclusion": "success",
+        },
+        "model_invoked": False,
+        "patch_generated": False,
+        "runner_queued": False,
+        "github_written": False,
         "merged": False,
         "deployed": False,
     }
