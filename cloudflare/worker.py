@@ -2499,7 +2499,7 @@ async def resolve_repair_incident(incident_id: str, payload: RepairIncidentResol
         raise HTTPException(400, "Explicit owner resolution confirmation is required")
     note = payload.resolution_note.strip()
     if len(note) < 10 or "\x00" in note:
-        raise HTTPException(422, "Resolution note must contain 10-1000 safe characters")
+        raise HTTPException(422, "Resolution note must contain 10-300 safe characters")
 
     incident = await db.prepare(
         """SELECT i.id, i.source, i.status, i.last_seen_at,
