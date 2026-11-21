@@ -2504,7 +2504,7 @@ async def resolve_repair_incident(incident_id: str, payload: RepairIncidentResol
     incident = await db.prepare(
         """SELECT i.id, i.source, i.status, i.last_seen_at,
                   e.repository, e.workflow_name, e.workflow_run_id, e.run_attempt,
-                  e.head_sha, e.conclusion
+                  e.head_branch, e.head_sha, e.conclusion
            FROM operational_incidents i
            LEFT JOIN operational_incident_evidence e ON e.incident_id = i.id
            WHERE i.id = ?"""
@@ -2551,6 +2551,38 @@ async def resolve_repair_incident(incident_id: str, payload: RepairIncidentResol
         raise HTTPException(422, "Verification commit SHA does not match the GitHub run")
     if int(verified_run.get("id") or 0) != payload.verification_run_id:
         raise HTTPException(422, "Verification run ID does not match the GitHub response")
+    if verified_run.get("head_branch") != incident.head_branch:
+        raise HTTPException(422, "Verification run must use the incident's original branch")
+    try:
+        incident_seen = datetime.fromisoformat(incident.last_seen_at.replace("Z", "+00:00"))
+        verification_created = datetime.fromisoformat(str(verified_run.get("created_at", "")).replace("Z", "+00:00"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, "Incident or verification timestamp is invalid") from exc
+    if verification_created <= incident_seen:
+        raise HTTPException(422, "Verification run must be created after the incident was last observed")
+
+    compare_url = (
+        "https://api.github.com/repos/ranggalazuardy-source/aura-autopilot/compare/"
+        + incident.head_sha + "..." + payload.verification_commit_sha
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            comparison = await client.get(
+                compare_url,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "AURA-Incident-Resolver"},
+            )
+    except Exception as exc:
+        raise HTTPException(502, "GitHub commit ancestry verification is unavailable") from exc
+    if comparison.status_code in (403, 429):
+        raise HTTPException(503, "GitHub verification rate limit reached; retry later")
+    if comparison.status_code != 200:
+        raise HTTPException(422, "GitHub could not verify the remediation commit ancestry")
+    try:
+        comparison_data = comparison.json()
+    except Exception as exc:
+        raise HTTPException(502, "GitHub returned invalid commit comparison data") from exc
+    if comparison_data.get("status") not in ("ahead", "identical"):
+        raise HTTPException(422, "Verification commit must descend from the incident commit")
 
     verified_url = verified_run.get("html_url") or verification_url
     verified_attempt = int(verified_run.get("run_attempt") or 1)
