@@ -170,10 +170,8 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
     <pointLight position={[-8, 6, -4]} intensity={12} color="#b5a7f4" distance={15} />
     <pointLight position={[6, 5, 4]} intensity={10} color="#9bd8e9" distance={14} />
     <OfficeGround />
+    <MeetingRoom />
     {Object.entries(ZONE_LAYOUT).map(([key, zone]) => <OfficeRoom key={key} zone={zone} />)}
-    
-    <mesh position={[0, 0.24, -0.1]} castShadow><boxGeometry args={[0.82, 0.48, 0.45]} /><meshStandardMaterial color="#506079" /></mesh>
-    <mesh position={[0, 0.53, -0.04]}><boxGeometry args={[0.67, 0.04, 0.06]} /><meshStandardMaterial color="#f3d48a" emissive="#f3d48a" emissiveIntensity={0.22} /></mesh>
     {positionedAgents.map((agent) => <AgentCharacter key={agent.name} agent={agent} homePosition={agent.home} workPosition={agent.work} waitingPosition={agent.waiting} selected={selectedAgent === agent.name} onSelect={onSelectAgent} />)}
     <ContactShadows position={[0, -0.025, 0]} opacity={0.28} scale={27} blur={2.2} far={9} />
     <OrbitControls ref={controlsRef} makeDefault target={[0, 0.7, 0]} minDistance={18} maxDistance={105} minPolarAngle={0.55} maxPolarAngle={1.28} enableDamping dampingFactor={0.08} enableZoom zoomSpeed={0.65} enablePan={false} />
