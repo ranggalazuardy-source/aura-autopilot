@@ -98,6 +98,31 @@ class BoundedModelPatchGeneratorTests(unittest.TestCase):
             generator.generate(self.incident(), self.plan())
         self.assertIsNone(model.prompt)
 
+    def test_rejects_unsafe_paths_before_source_reader_access(self):
+        reader = Reader({"app/agents/example.py": "source"})
+        model = Model(self.response())
+        generator = BoundedModelPatchGenerator(source_reader=reader, invoke_model=model)
+        with self.assertRaisesRegex(ValueError, "candidate_paths_blocked"):
+            generator.generate(
+                self.incident(),
+                self.plan(["app/agents/example.py", "../secrets"]),
+            )
+        self.assertEqual(reader.calls, [])
+        self.assertIsNone(model.prompt)
+
+    def test_total_source_context_limit_is_enforced(self):
+        paths = [
+            "app/agents/one.py",
+            "app/agents/two.py",
+            "app/agents/three.py",
+        ]
+        reader = Reader({path: "x" * 11_000 for path in paths})
+        model = Model(self.response())
+        generator = BoundedModelPatchGenerator(source_reader=reader, invoke_model=model)
+        with self.assertRaisesRegex(ValueError, "total_source_context_limit_exceeded"):
+            generator.generate(self.incident(), self.plan(paths))
+        self.assertIsNone(model.prompt)
+
     def test_rejects_invalid_model_json_and_unknown_keys(self):
         for raw in ("not-json", json.dumps({"unified_diff": PATCH, "files": [], "extra": True})):
             with self.subTest(raw=raw):
