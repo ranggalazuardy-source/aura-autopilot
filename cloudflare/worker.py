@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import math
 from uuid import uuid4
 import hmac
@@ -62,6 +63,7 @@ async def unexpected_error_handler(request: Request, exc: Exception):
         str(exc)[:500],
     )
     traceback.print_exc()
+    await persist_runtime_exception(request, error_id, exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "error_id": error_id,
@@ -134,6 +136,51 @@ async def write_audit(db, event_type: str, object_id: str, details: str = ""):
     await db.prepare(
         "INSERT INTO audit_log (id, event_type, object_id, details, created_at) VALUES (?, ?, ?, ?, ?)"
     ).bind(uuid4().hex, event_type, object_id, details[:1000], now_iso()).run()
+
+
+async def record_operational_incident(db, source: str, fingerprint: str, summary: str, severity: str = "high"):
+    """Deduplicate an incident and create a no-cost IT response task."""
+    incident_id = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    task_id = "incident_" + incident_id
+    timestamp = now_iso()
+    await db.prepare(
+        """INSERT INTO operational_incidents
+        (id, fingerprint, source, severity, summary, status, occurrence_count, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, 'open', 1, ?, ?)
+        ON CONFLICT(fingerprint) DO UPDATE SET
+          occurrence_count = operational_incidents.occurrence_count + 1,
+          last_seen_at = excluded.last_seen_at,
+          summary = excluded.summary,
+          severity = CASE WHEN excluded.severity = 'critical' THEN 'critical'
+                          WHEN operational_incidents.severity = 'critical' THEN 'critical'
+                          WHEN excluded.severity = 'high' THEN 'high' ELSE operational_incidents.severity END"""
+    ).bind(incident_id, fingerprint[:180], source[:80], severity, summary[:1000], timestamp, timestamp).run()
+    await db.prepare(
+        """INSERT INTO agent_tasks
+        (id, agent, objective, priority, related_opportunity_id, status, result_summary, created_at, updated_at)
+        VALUES (?, 'Incident Response Commander', ?, ?, '', 'queued', '', ?, ?)
+        ON CONFLICT(id) DO NOTHING"""
+    ).bind(task_id, f"Investigate and resolve operational incident {incident_id}: {summary[:500]}",
+           "urgent" if severity == "critical" else "high", timestamp, timestamp).run()
+    await write_audit(db, "operational.incident_detected", incident_id, f"{source}: {summary[:700]}")
+
+
+async def persist_runtime_exception(request: Request, error_id: str, exc: Exception):
+    env = get_env(request)
+    db = getattr(env, "DB", None) if env else None
+    if db is None:
+        return
+    error_type = type(exc).__name__
+    route = request.url.path[:180]
+    fingerprint = f"runtime:{request.method}:{route}:{error_type}"
+    try:
+        await record_operational_incident(
+            db, "runtime_exception", fingerprint,
+            f"{request.method} {route} raised {error_type} (error_id={error_id})",
+            "high",
+        )
+    except Exception as persist_error:
+        print("AURA_INCIDENT_PERSIST_FAILED", type(persist_error).__name__, str(persist_error)[:200])
 
 
 class OpportunityIn(BaseModel):
@@ -2096,8 +2143,9 @@ async def audit_entries(db=Depends(get_db)):
     return d1_rows(result)
 
 
-# Cloudflare Cron entrypoint. The trigger is provisioned, but execution remains
-# opt-in until an owner-approved worker policy and model adapter are configured.
+# Cloudflare Cron entrypoint: bounded, no-model operational monitoring.
+# This monitor only reads D1, reclaims expired task leases, records incidents and
+# creates internal IT tasks. It never calls a model, external API or paid service.
 @handler
 async def on_scheduled(event, env, ctx):
     scheduler_enabled = str(getattr(env, "AURA_SCHEDULER_ENABLED", "false")).lower() == "true"
@@ -2108,15 +2156,80 @@ async def on_scheduled(event, env, ctx):
             "cron": getattr(event, "cron", None),
         }))
         return
-    # Safe bootstrap mode: do not claim tasks or call a model. A later runtime
-    # activation must add bounded dispatch, retries and per-task spend controls.
-    print("AURA_SCHEDULER_READY", json.dumps({
-        "mode": "observe_only",
-        "task_dispatch_enabled": False,
-        "model_provider_enabled": False,
-        "scheduled_time": getattr(event, "scheduledTime", None),
-        "cron": getattr(event, "cron", None),
-    }))
+    db = getattr(env, "DB", None) if env else None
+    if db is None:
+        print("AURA_MONITOR_FAILED", json.dumps({"reason": "D1 binding unavailable"}))
+        return
+    timestamp = now_iso()
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    orphan_cutoff = (datetime.now(timezone.utc) - timedelta(seconds=120)).isoformat()
+    try:
+        expired = await db.prepare(
+            """SELECT t.id FROM agent_tasks t
+            LEFT JOIN task_execution_leases l ON l.task_id = t.id
+            WHERE t.status = 'in_progress'
+              AND ((l.task_id IS NOT NULL AND l.expires_at <= ?)
+                   OR (l.task_id IS NULL AND t.updated_at <= ?))
+            LIMIT 50"""
+        ).bind(now_epoch, orphan_cutoff).all()
+        expired_rows = d1_rows(expired)
+        if expired_rows:
+            await db.prepare(
+                """UPDATE agent_tasks SET status = 'queued', updated_at = ?
+                WHERE status = 'in_progress' AND (
+                  EXISTS (SELECT 1 FROM task_execution_leases l
+                          WHERE l.task_id = agent_tasks.id AND l.expires_at <= ?)
+                  OR (updated_at <= ? AND NOT EXISTS (
+                      SELECT 1 FROM task_execution_leases l WHERE l.task_id = agent_tasks.id))
+                )"""
+            ).bind(timestamp, now_epoch, orphan_cutoff).run()
+            await db.prepare("DELETE FROM task_execution_leases WHERE expires_at <= ?").bind(now_epoch).run()
+            await record_operational_incident(
+                db, "lease_recovery", f"lease-recovery:{timestamp[:13]}",
+                f"Automatically reclaimed {len(expired_rows)} expired or orphaned task lease(s)",
+                "medium",
+            )
+        counts_result = await db.prepare(
+            """SELECT
+              SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+              SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+              SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked
+            FROM agent_tasks"""
+        ).first()
+        counts = {
+            "queued": int(getattr(counts_result, "queued", 0) or 0),
+            "in_progress": int(getattr(counts_result, "in_progress", 0) or 0),
+            "blocked": int(getattr(counts_result, "blocked", 0) or 0),
+        }
+        await db.prepare(
+            """INSERT INTO operational_heartbeats
+            (id, scheduled_at, queued_tasks, in_progress_tasks, blocked_tasks, recovered_leases)
+            VALUES (?, ?, ?, ?, ?, ?)"""
+        ).bind(uuid4().hex, timestamp, counts["queued"], counts["in_progress"],
+               counts["blocked"], len(expired_rows)).run()
+        await write_audit(
+            db, "operational.monitor_completed", "scheduled-monitor",
+            json.dumps({**counts, "recovered_leases": len(expired_rows)}, sort_keys=True),
+        )
+        print("AURA_MONITOR_OK", json.dumps({
+            "mode": "observe_and_safe_recover",
+            "task_dispatch_enabled": False,
+            "model_provider_enabled": False,
+            "counts": counts,
+            "recovered_leases": len(expired_rows),
+            "scheduled_time": getattr(event, "scheduledTime", None),
+            "cron": getattr(event, "cron", None),
+        }))
+    except Exception as exc:
+        print("AURA_MONITOR_FAILED", type(exc).__name__, str(exc)[:500])
+        try:
+            await record_operational_incident(
+                db, "scheduled_monitor", f"monitor:{type(exc).__name__}",
+                f"Scheduled operational monitor failed: {type(exc).__name__}: {str(exc)[:400]}",
+                "critical",
+            )
+        except Exception:
+            pass
 
 
 # Use Cloudflare's official ASGI entrypoint. The adapter injects Worker bindings
