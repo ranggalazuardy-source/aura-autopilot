@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from workers import asgi, handler
+from app.services.patch_approval_issuer import issue_patch_approval_receipt
 
 VERSION = "1.0.3"
 API_KEY_HEADER = APIKeyHeader(name="X-AURA-API-Key", auto_error=False)
@@ -181,6 +182,15 @@ async def persist_runtime_exception(request: Request, error_id: str, exc: Except
         )
     except Exception as persist_error:
         print("AURA_INCIDENT_PERSIST_FAILED", type(persist_error).__name__, str(persist_error)[:200])
+
+
+class PatchApprovalReceiptIn(BaseModel):
+    incident_id: str = Field(min_length=1, max_length=64)
+    base_sha: str = Field(min_length=40, max_length=40)
+    patch_sha256: str = Field(min_length=64, max_length=64)
+    approved_paths: list[str] = Field(min_length=1, max_length=6)
+    ttl_seconds: int = Field(default=300, ge=1, le=600)
+    confirm_owner_approval: bool
 
 
 class OpportunityIn(BaseModel):
@@ -2154,6 +2164,51 @@ async def list_ceo_decisions(db=Depends(get_db)):
         owner_approval_required, created_at FROM ceo_decisions ORDER BY created_at DESC LIMIT 100"""
     ).all()
     return d1_rows(result)
+
+
+@app.post("/repair/approvals", dependencies=[Depends(require_api_key)])
+async def issue_repair_approval(
+    payload: PatchApprovalReceiptIn,
+    request: Request,
+    db=Depends(get_db),
+):
+    """Issue a short-lived repair receipt only after explicit owner confirmation."""
+    if payload.confirm_owner_approval is not True:
+        raise HTTPException(400, "Explicit owner approval confirmation is required")
+
+    env = get_env(request)
+    owner_key = getattr(env, "AURA_API_KEY", None) if env else None
+    if not isinstance(owner_key, str) or not owner_key:
+        raise HTTPException(503, "Owner authentication context is unavailable")
+    owner_id = hashlib.sha256(owner_key.encode("utf-8")).hexdigest()[:32]
+
+    try:
+        receipt_id = await issue_patch_approval_receipt(
+            db,
+            authenticated_owner_id=owner_id,
+            incident_id=payload.incident_id,
+            base_sha=payload.base_sha,
+            patch_sha256=payload.patch_sha256,
+            approved_paths=payload.approved_paths,
+            ttl_seconds=payload.ttl_seconds,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+    await write_audit(
+        db,
+        "patch_approval.issued",
+        receipt_id,
+        f"incident={payload.incident_id}; base={payload.base_sha}; "
+        f"patch={payload.patch_sha256}; paths={json.dumps(payload.approved_paths)}; "
+        f"ttl={payload.ttl_seconds}",
+    )
+    return {
+        "receipt_id": receipt_id,
+        "incident_id": payload.incident_id,
+        "expires_in_seconds": payload.ttl_seconds,
+        "status": "issued",
+    }
 
 
 @app.get("/audit", dependencies=[Depends(require_api_key)])
