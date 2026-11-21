@@ -789,6 +789,26 @@ SKILL_PACKS = {
     },
 }
 
+# Backward-compatible names used by the initial D1 bootstrap task queue.
+# Every alias resolves to a canonical role in the curated 24-role registry.
+AGENT_ALIASES = {
+    "CEO Orchestrator": "Agents Orchestrator",
+    "Market Intelligence": "Product Trend Researcher",
+    "Service Sales": "Sales Outreach",
+    "Clipping Studio": "AI Engineer",
+    "Affiliate Commerce": "Growth Hacker",
+    "Content & Media": "Content Creator",
+    "E-commerce / Dropship": "Product Trend Researcher",
+    "Digital Products": "Business Strategist",
+    "SEO / Website": "SEO Specialist",
+    "Equity Research": "Finance Tracker",
+    "Crypto Research": "Finance Tracker",
+    "Trading Risk Manager": "Finance Tracker",
+    "Finance & Treasury": "Finance Tracker",
+    "Compliance & Rights": "Legal Compliance Checker",
+    "QA / Auditor": "Model QA Specialist",
+}
+
 AGENT_SKILLS = {
     "Agents Orchestrator": ["platform-engineering-security","market-intelligence"],
     "Business Strategist": ["market-intelligence","finance-investment-risk"],
@@ -847,7 +867,8 @@ AGENT_OFFICE_PROFILES = {
 
 
 def resolve_agent_skills(agent: str):
-    packs = AGENT_SKILLS.get(agent)
+    canonical_agent = AGENT_ALIASES.get(agent, agent)
+    packs = AGENT_SKILLS.get(canonical_agent)
     if packs is None:
         raise HTTPException(422, "Unknown agent; agent name must match the AURA registry")
     return packs
