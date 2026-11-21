@@ -49,6 +49,7 @@ class RepairProposalLifecycleTests(unittest.TestCase):
         source = ast.unparse(route)
         self.assertIn("confirm_owner_queue", source)
         self.assertIn("row.patch_text", source)
+        self.assertIn("hashlib.sha256", source)
         self.assertIn("row.approval_receipt_id", source)
         self.assertIn("consumed_at IS NULL", source)
         self.assertIn("create_execution_request", source)
