@@ -43,6 +43,8 @@ class RepairIncidentTriageTests(unittest.TestCase):
         self.assertIn("status IN ('open','investigating')", source)
         self.assertIn("UPDATE operational_incident_evidence", source)
         self.assertIn("UPDATE operational_incidents", source)
+        self.assertIn("triage_owner = ?", source)
+        self.assertIn('"IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander"', source)
 
     def test_triage_never_generates_or_executes_patch(self):
         source = ast.unparse(self.function())
@@ -56,8 +58,13 @@ class RepairIncidentTriageTests(unittest.TestCase):
     def test_triage_audit_is_written(self):
         self.assertIn("operational.incident_triaged", ast.unparse(self.function()))
 
+    def test_triage_response_exposes_explicit_repair_owner(self):
+        source = ast.unparse(self.function())
+        self.assertIn('"owner": "IT_AI_ENGINEER" if plan.status == "ready_for_owner_approval" else "Incident Response Commander"', source)
+
     def test_schema_supports_only_known_triage_states(self):
         self.assertIn("triage_category TEXT NOT NULL DEFAULT 'unclassified' CHECK(triage_category IN", SCHEMA)
+        self.assertIn("triage_owner TEXT NOT NULL DEFAULT 'Incident Response Commander'", SCHEMA)
         for category in (
             "automated_test_regression",
             "python_syntax_or_import",
