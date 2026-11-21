@@ -2712,7 +2712,7 @@ async def queue_approved_repair_proposal(
     paths = json.loads(row.approved_paths_json)
     paths_json = json.dumps(sorted(paths), separators=(",", ":"))
     receipt = await db.prepare(
-        """SELECT id FROM patch_approval_receipts
+        """SELECT id, expires_at FROM patch_approval_receipts
            WHERE id = ? AND approved_by = ? AND incident_id = ? AND base_sha = ?
              AND patch_sha256 = ? AND approved_paths_json = ? AND expires_at > ?
              AND revoked_at IS NULL AND consumed_at IS NULL"""
@@ -2725,8 +2725,9 @@ async def queue_approved_repair_proposal(
     claim = await db.prepare(
         """UPDATE repair_patch_proposals SET status = 'queueing'
            WHERE id = ? AND status = 'approved' AND approval_receipt_id = ?
+             AND expires_at > ?
            RETURNING id"""
-    ).bind(proposal_id, row.approval_receipt_id).first()
+    ).bind(proposal_id, row.approval_receipt_id, now).first()
     if claim is None:
         raise HTTPException(409, "Repair proposal queueing is already being processed")
     try:
@@ -2737,7 +2738,7 @@ async def queue_approved_repair_proposal(
             patch_text=row.patch_text,
             approved_paths=paths,
             receipt_id=row.approval_receipt_id,
-            ttl_seconds=600,
+            ttl_seconds=min(600, int(receipt.expires_at) - now),
         )
     except ValueError as exc:
         await db.prepare(
