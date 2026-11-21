@@ -122,3 +122,28 @@ body{background:radial-gradient(ellipse at 50% -25%,#1b2942 0%,#0b1220 48%,#080d
   .metric-card{padding:9px 10px}
   .provider-heading{align-items:flex-start;flex-direction:column}
 }
+
+/* Dedicated room labels and floor-plan readability */
+.room-door-label{white-space:nowrap;padding:4px 8px;border:1px solid #8c9bb2;border-radius:5px;background:#172033;color:#e8edf7;font-size:8px;font-weight:900;letter-spacing:.12em;box-shadow:0 3px 12px #11182755}
+.meeting-door{border-color:#f3d48a;color:#ffe7a3;background:#28243a}
+.scene-canvas-wrap{background:radial-gradient(ellipse at 50% 45%,#263247 0%,#111827 100%)}
+.scene-canvas-wrap canvas{image-rendering:auto}
+.scene-hint{max-width:42%;text-align:right;line-height:1.45}
+@media(max-width:850px){
+  .scene-panel{min-height:570px}
+  .scene-canvas-wrap,.scene-canvas-wrap canvas{min-height:570px}
+  .scene-heading{top:12px;left:12px;right:12px;align-items:flex-start}
+  .scene-heading h2{font-size:14px}
+  .scene-hint{max-width:48%;font-size:9px}
+  .scene-legend{left:9px;bottom:9px;gap:7px;padding:7px 8px}
+  .scene-legend span{font-size:9px}
+  .runtime-note{bottom:54px;right:10px;font-size:8px}
+}
+@media(max-width:480px){
+  .scene-panel{min-height:520px}
+  .scene-canvas-wrap,.scene-canvas-wrap canvas{min-height:520px}
+  .scene-hint{display:none}
+  .scene-controls{right:9px;top:58px}
+  .scene-controls button{width:42px;height:42px}
+  .scene-legend{max-width:calc(100% - 18px);flex-wrap:wrap}
+}
