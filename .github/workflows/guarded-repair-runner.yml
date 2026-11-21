@@ -27,6 +27,9 @@ concurrency:
 
 jobs:
   acquire-request:
+    # Fail closed until the owner explicitly enables the runner after configuring
+    # the Worker runner secret, GitHub App credentials, and API base URL.
+    if: vars.AURA_REPAIR_RUNNER_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
