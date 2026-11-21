@@ -55,6 +55,25 @@ class ModelExecutionClaimsMigrationTests(unittest.TestCase):
             ).fetchone(),
             ("gemini", "failed"),
         )
+        db.execute(
+            """INSERT INTO agent_tasks
+               (id, agent, objective, priority, related_opportunity_id, status,
+                result_summary, created_at, updated_at)
+               VALUES ('migration_auto', 'AI Engineer', 'automatic provider claim',
+                       'normal', '', 'in_progress', '', '2026-01-03', '2026-01-03')"""
+        )
+        db.execute(
+            """INSERT INTO model_execution_claims
+               (task_id, provider, status, artifact_id, created_at)
+               VALUES ('migration_auto', 'auto', 'started', NULL, '2026-01-03')"""
+        )
+        self.assertEqual(
+            db.execute(
+                "SELECT provider, status FROM model_execution_claims WHERE task_id = ?",
+                ("migration_auto",),
+            ).fetchone(),
+            ("auto", "started"),
+        )
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         db.close()
 
