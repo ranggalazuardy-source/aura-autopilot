@@ -5,6 +5,7 @@ revocation, HTTP, GitHub, patch, merge, or deployment capabilities.
 """
 
 import json
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -36,6 +37,8 @@ class D1PatchApprovalStore:
         paths = getattr(approval, "approved_paths")
         if (
             any(not isinstance(value, str) or not value.strip() for value in values)
+            or not re.fullmatch(r"[0-9a-f]{40}", values[3])
+            or not re.fullmatch(r"[0-9a-f]{64}", values[4])
             or not isinstance(paths, tuple)
             or not paths
             or any(not isinstance(path, str) or not path for path in paths)
