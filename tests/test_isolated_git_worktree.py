@@ -66,7 +66,7 @@ class IsolatedGitWorktreeTests(unittest.TestCase):
         with self.assertRaisesRegex(GitWorktreeError, "outside the repair allowlist"):
             self.workspace.apply(patch)
         self.assertTrue(path.exists())
-        self.assertEqual((self.repo / "README.md").exists(), False)
+        self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), "old\n")
 
     def test_cleanup_removes_only_temporary_worktree(self):
         path = self.workspace.create("aura/repair/cleanup", self.base)
