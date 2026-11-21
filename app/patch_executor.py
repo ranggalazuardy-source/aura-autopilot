@@ -1,8 +1,8 @@
 """Approval-gated orchestration for isolated repair patch proposals.
 
-The executor is adapter-driven. It never calls an AI provider and exposes no
-merge or deployment operation. Production adapters must independently enforce
-branch-scoped writes and verify owner approvals against trusted storage.
+This adapter-driven core has no provider, merge, or deployment capability.
+Concrete production adapters must enforce branch-scoped writes and verify
+owner approvals against trusted, replay-protected storage.
 """
 
 from dataclasses import dataclass
@@ -50,7 +50,7 @@ class PatchExecutionResult:
 
 class ApprovalVerifier(Protocol):
     def verify(self, approval: PatchApproval) -> bool:
-        """Verify a stored, owner-issued approval receipt."""
+        """Verify a stored, owner-issued, unexpired, unrevoked receipt."""
 
 
 class PatchWorkspace(Protocol):
@@ -62,18 +62,58 @@ class PatchWorkspace(Protocol):
     ) -> str: ...
 
 
+def _blocked(*reasons: str) -> PatchExecutionResult:
+    return PatchExecutionResult("blocked", reasons=tuple(dict.fromkeys(reasons)))
+
+
 def execute_approved_patch(
     request: PatchExecutionRequest,
     verifier: ApprovalVerifier,
     workspace: PatchWorkspace,
 ) -> PatchExecutionResult:
-    """Validate, then prepare a tested draft PR on a dedicated isolated branch.
+    """Validate and prepare a tested draft PR after trusted owner approval.
 
-    This function requires concrete trusted approval and workspace adapters.
-    It deliberately has no provider, merge, deployment, or main-branch API.
+    All input and diff gates run before the verifier or workspace is invoked.
+    Adapter errors fail closed. A failed operation never proceeds to PR creation.
     """
+    if not isinstance(request, PatchExecutionRequest):
+        return _blocked("invalid_execution_request")
+    if not isinstance(request.plan, RepairPlan):
+        return _blocked("invalid_repair_plan")
+    if not isinstance(request.approval, PatchApproval):
+        return _blocked("invalid_approval_receipt")
+    if not isinstance(request.patch_text, str) or not request.patch_text:
+        return _blocked("invalid_patch_text")
+    if not isinstance(request.base_sha, str):
+        return _blocked("invalid_base_commit_sha")
+    if not isinstance(request.changed_files, tuple) or not request.changed_files:
+        return _blocked("invalid_changed_files")
+    if any(not isinstance(item, ChangedFile) for item in request.changed_files):
+        return _blocked("invalid_changed_file_entry")
+
     plan = request.plan
     approval = request.approval
+    if not all(isinstance(path, str) for path in plan.candidate_paths):
+        return _blocked("invalid_repair_plan_paths")
+    if not isinstance(approval.approved_paths, tuple) or not all(
+        isinstance(path, str) for path in approval.approved_paths
+    ):
+        return _blocked("invalid_approval_paths")
+    if not all(
+        isinstance(value, str)
+        for value in (
+            approval.approval_id,
+            approval.approved_by,
+            approval.incident_id,
+            approval.base_sha,
+            approval.patch_sha256,
+            plan.incident_id,
+            plan.category,
+            plan.status,
+        )
+    ):
+        return _blocked("invalid_approval_or_plan_fields")
+
     patch_sha256 = hashlib.sha256(request.patch_text.encode("utf-8")).hexdigest()
     reasons: list[str] = []
 
@@ -92,10 +132,26 @@ def execute_approved_patch(
     if not approval.approval_id.strip() or not approval.approved_by.strip():
         reasons.append("approval_receipt_incomplete")
 
-    metadata_paths = tuple(sorted(item.filename.replace("\\", "/") for item in request.changed_files))
-    planned_paths = tuple(sorted(path.replace("\\", "/") for path in plan.candidate_paths))
-    approved_paths = tuple(sorted(path.replace("\\", "/") for path in approval.approved_paths))
-    if not metadata_paths or metadata_paths != planned_paths:
+    if any(
+        not isinstance(item.filename, str)
+        or not isinstance(item.status, str)
+        or any(not isinstance(count, int) or isinstance(count, bool)
+               for count in (item.additions, item.deletions, item.changes))
+        for item in request.changed_files
+    ):
+        reasons.append("invalid_changed_file_metadata")
+        return _blocked(*reasons)
+
+    metadata_paths = tuple(sorted(
+        item.filename.replace("\\", "/") for item in request.changed_files
+    ))
+    planned_paths = tuple(sorted(
+        path.replace("\\", "/") for path in plan.candidate_paths
+    ))
+    approved_paths = tuple(sorted(
+        path.replace("\\", "/") for path in approval.approved_paths
+    ))
+    if metadata_paths != planned_paths:
         reasons.append("changed_paths_do_not_match_repair_plan")
     if metadata_paths != approved_paths:
         reasons.append("changed_paths_do_not_match_owner_approval")
@@ -109,23 +165,45 @@ def execute_approved_patch(
         reasons.extend(diff_decision.reasons)
 
     if reasons:
-        return PatchExecutionResult("blocked", reasons=tuple(dict.fromkeys(reasons)))
+        return _blocked(*reasons)
 
     try:
         approval_valid = verifier.verify(approval)
     except Exception:
-        return PatchExecutionResult("blocked", reasons=("approval_verification_failed",))
-    if not approval_valid:
-        return PatchExecutionResult("blocked", reasons=("owner_approval_not_verified",))
+        return _blocked("approval_verification_failed")
+    if approval_valid is not True:
+        return _blocked("owner_approval_not_verified")
 
     digest = patch_sha256[:10]
     incident_slug = re.sub(r"[^A-Za-z0-9._-]+", "-", plan.incident_id).strip("-")
     branch_name = f"aura/repair/{incident_slug}-{digest}"
 
-    # Side effects start only after all local gates and trusted approval pass.
-    workspace.create_isolated_branch(branch_name, request.base_sha)
-    workspace.apply_unified_diff(branch_name, request.patch_text)
-    if not workspace.run_quality_checks(branch_name):
+    # Side effects start only after every deterministic gate and trusted approval.
+    try:
+        workspace.create_isolated_branch(branch_name, request.base_sha)
+    except Exception:
+        return PatchExecutionResult(
+            "execution_failed", reasons=("isolated_branch_creation_failed",)
+        )
+
+    try:
+        workspace.apply_unified_diff(branch_name, request.patch_text)
+    except Exception:
+        return PatchExecutionResult(
+            "execution_failed",
+            branch_name=branch_name,
+            reasons=("patch_application_failed",),
+        )
+
+    try:
+        checks_passed = workspace.run_quality_checks(branch_name)
+    except Exception:
+        return PatchExecutionResult(
+            "execution_failed",
+            branch_name=branch_name,
+            reasons=("quality_check_execution_failed",),
+        )
+    if checks_passed is not True:
         return PatchExecutionResult(
             "checks_failed",
             branch_name=branch_name,
@@ -143,7 +221,21 @@ def execute_approved_patch(
         "- Isolated-branch quality checks passed.\n\n"
         "This is a draft for human review. It is not merged or deployed."
     )
-    pr_url = workspace.create_draft_pull_request(branch_name, title, body)
+    try:
+        pr_url = workspace.create_draft_pull_request(branch_name, title, body)
+    except Exception:
+        return PatchExecutionResult(
+            "execution_failed",
+            branch_name=branch_name,
+            reasons=("draft_pr_creation_failed",),
+        )
+    if not isinstance(pr_url, str) or not pr_url.startswith("https://github.com/"):
+        return PatchExecutionResult(
+            "execution_failed",
+            branch_name=branch_name,
+            reasons=("invalid_draft_pr_url",),
+        )
+
     return PatchExecutionResult(
         "draft_pr_created",
         branch_name=branch_name,
