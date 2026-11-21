@@ -10,8 +10,8 @@ from app.patch_policy import ChangedFile, PatchDecision, evaluate_patch
 
 
 _HUNK_HEADER = re.compile(
-    r"^@@ -(?P<old_start>\\d+)(?:,(?P<old_count>\\d+))? "
-    r"\\+(?P<new_start>\\d+)(?:,(?P<new_count>\\d+))? @@(?: .*)?$"
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? "
+    r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@(?: .*)?$"
 )
 
 
@@ -45,7 +45,7 @@ def evaluate_unified_diff(
     if len(blocks) != len(items):
         reasons.append("file_count_mismatch")
 
-    metadata_by_path = {item.filename.replace("\\\\", "/"): item for item in items}
+    metadata_by_path = {item.filename.replace("\\", "/"): item for item in items}
     seen: set[str] = set()
 
     for block in blocks:
@@ -61,7 +61,7 @@ def evaluate_unified_diff(
         if old_path != new_path:
             reasons.append("path_change_not_allowed")
             continue
-        path = new_path.replace("\\\\", "/")
+        path = new_path.replace("\\", "/")
         if path in seen:
             reasons.append("duplicate_diff_file")
         seen.add(path)
@@ -124,7 +124,7 @@ def evaluate_unified_diff(
             elif line.startswith(" "):
                 old_consumed += 1
                 new_consumed += 1
-            elif line.startswith("\\\\"):
+            elif line.startswith("\\"):
                 continue
             else:
                 reasons.append(f"invalid_hunk_line:{path}")
