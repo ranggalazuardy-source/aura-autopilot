@@ -123,7 +123,7 @@ class D1TriagedRepairTests(unittest.IsolatedAsyncioTestCase):
             FakeD1(self.row()), "c" * 24, generator=generator,
             confirm_owner_generation=True, provider_inference_approved=True,
         )
-        self.assertEqual(result.status, "ready_for_owner_approval")
+        self.assertEqual(result.status, "ready_for_owner_approval", result.reasons)
         self.assertEqual(reader.calls, [("app/agents/example.py", BASE)])
         self.assertIn(BASE, model.prompt)
         self.assertEqual(result.changed_paths, ("app/agents/example.py",))
