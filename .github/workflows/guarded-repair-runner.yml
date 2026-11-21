@@ -139,7 +139,7 @@ jobs:
         with:
           ref: ${{ inputs.base_sha }}
           token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/download-artifact@v6
         with:
           name: aura-repair-patch
