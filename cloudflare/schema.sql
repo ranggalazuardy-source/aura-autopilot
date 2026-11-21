@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS operational_incident_evidence (
     head_sha TEXT NOT NULL CHECK(length(head_sha) = 40),
     conclusion TEXT NOT NULL CHECK(conclusion = 'failure'),
     failed_jobs_json TEXT NOT NULL CHECK(json_valid(failed_jobs_json) AND json_type(failed_jobs_json) = 'array'),
-    triage_category TEXT NOT NULL DEFAULT 'unclassified' CHECK(triage_category = 'unclassified'),
+    triage_category TEXT NOT NULL DEFAULT 'unclassified' CHECK(triage_category IN ('unclassified','automated_test_regression','python_syntax_or_import','dependency_or_security_audit','database_schema','cloudflare_deployment_or_config','container_or_runtime','unknown_or_unclassified')),
     candidate_paths_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(candidate_paths_json) AND json_type(candidate_paths_json) = 'array'),
     created_at TEXT NOT NULL,
     FOREIGN KEY(incident_id) REFERENCES operational_incidents(id) ON DELETE CASCADE,
