@@ -36,22 +36,31 @@ class FakeVerifier:
 
 
 class FakeWorkspace:
-    def __init__(self, checks_pass=True):
+    def __init__(self, checks_pass=True, fail_at=None):
         self.checks_pass = checks_pass
+        self.fail_at = fail_at
         self.calls = []
+
+    def _fail(self, stage):
+        if self.fail_at == stage:
+            raise RuntimeError(f"{stage} adapter unavailable")
 
     def create_isolated_branch(self, branch_name, base_sha):
         self.calls.append(("branch", branch_name, base_sha))
+        self._fail("branch")
 
     def apply_unified_diff(self, branch_name, patch_text):
         self.calls.append(("apply", branch_name, patch_text))
+        self._fail("apply")
 
     def run_quality_checks(self, branch_name):
         self.calls.append(("checks", branch_name))
+        self._fail("checks")
         return self.checks_pass
 
     def create_draft_pull_request(self, branch_name, title, body):
         self.calls.append(("draft_pr", branch_name, title, body))
+        self._fail("draft_pr")
         return "https://github.com/example/repo/pull/123"
 
 
@@ -188,6 +197,85 @@ class PatchExecutorTests(unittest.TestCase):
 
         self.assertIn("repair_plan_not_eligible", result.reasons)
         self.assertEqual(workspace.calls, [])
+
+    def test_malformed_patch_text_fails_closed_without_exception(self):
+        request = make_request()
+        request = PatchExecutionRequest(
+            request.plan, None, request.changed_files, request.base_sha,
+            request.approval
+        )
+        verifier = FakeVerifier()
+        workspace = FakeWorkspace()
+
+        result = execute_approved_patch(request, verifier, workspace)
+
+        self.assertEqual(result.status, "blocked")
+        self.assertIn("invalid_patch_text", result.reasons)
+        self.assertEqual(verifier.calls, 0)
+        self.assertEqual(workspace.calls, [])
+
+    def test_invalid_changed_file_entry_fails_closed(self):
+        request = make_request()
+        request = PatchExecutionRequest(
+            request.plan, request.patch_text, ("not-a-file-record",),
+            request.base_sha, request.approval
+        )
+        workspace = FakeWorkspace()
+
+        result = execute_approved_patch(request, FakeVerifier(), workspace)
+
+        self.assertIn("invalid_changed_file_entry", result.reasons)
+        self.assertEqual(workspace.calls, [])
+
+    def test_branch_creation_exception_stops_execution(self):
+        workspace = FakeWorkspace(fail_at="branch")
+
+        result = execute_approved_patch(make_request(), FakeVerifier(), workspace)
+
+        self.assertEqual(result.status, "execution_failed")
+        self.assertIn("isolated_branch_creation_failed", result.reasons)
+        self.assertEqual([call[0] for call in workspace.calls], ["branch"])
+
+    def test_patch_application_exception_stops_before_checks(self):
+        workspace = FakeWorkspace(fail_at="apply")
+
+        result = execute_approved_patch(make_request(), FakeVerifier(), workspace)
+
+        self.assertEqual(result.status, "execution_failed")
+        self.assertIn("patch_application_failed", result.reasons)
+        self.assertEqual([call[0] for call in workspace.calls], ["branch", "apply"])
+
+    def test_quality_check_exception_stops_before_draft_pr(self):
+        workspace = FakeWorkspace(fail_at="checks")
+
+        result = execute_approved_patch(make_request(), FakeVerifier(), workspace)
+
+        self.assertEqual(result.status, "execution_failed")
+        self.assertIn("quality_check_execution_failed", result.reasons)
+        self.assertEqual([call[0] for call in workspace.calls],
+                         ["branch", "apply", "checks"])
+
+    def test_draft_pr_adapter_exception_fails_closed(self):
+        workspace = FakeWorkspace(fail_at="draft_pr")
+
+        result = execute_approved_patch(make_request(), FakeVerifier(), workspace)
+
+        self.assertEqual(result.status, "execution_failed")
+        self.assertIn("draft_pr_creation_failed", result.reasons)
+        self.assertEqual([call[0] for call in workspace.calls],
+                         ["branch", "apply", "checks", "draft_pr"])
+
+    def test_non_github_pr_url_is_rejected(self):
+        class BadUrlWorkspace(FakeWorkspace):
+            def create_draft_pull_request(self, branch_name, title, body):
+                self.calls.append(("draft_pr", branch_name, title, body))
+                return "https://attacker.invalid/pull/123"
+
+        workspace = BadUrlWorkspace()
+        result = execute_approved_patch(make_request(), FakeVerifier(), workspace)
+
+        self.assertEqual(result.status, "execution_failed")
+        self.assertIn("invalid_draft_pr_url", result.reasons)
 
 
 if __name__ == "__main__":
