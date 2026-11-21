@@ -303,7 +303,7 @@ CREATE TABLE IF NOT EXISTS repair_execution_requests (
     patch_text TEXT NOT NULL CHECK(length(patch_text) BETWEEN 1 AND 256000),
     approved_paths_json TEXT NOT NULL CHECK(json_valid(approved_paths_json) AND json_type(approved_paths_json) = 'array'),
     approval_receipt_id TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','claimed','expired','blocked')),
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','dispatched','claimed','expired','blocked')),
     expires_at INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     claimed_at INTEGER,
