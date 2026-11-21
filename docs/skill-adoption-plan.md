@@ -6,7 +6,7 @@
 
 ## Selection rationale
 
-AURA's objective is to identify and build multiple lawful revenue streams with zero initial capital, moderate risk and owner approval before spending or external commitments. The upstream catalogue is broad; AURA adopts only 20 roles that directly support opportunity research, audience growth, content production, sales, financial operations, compliance and platform reliability.
+AURA's objective is to identify and build multiple lawful revenue streams with zero initial capital, moderate risk and owner approval before spending or external commitments. The upstream catalogue is broad; AURA adopts only 24 roles that directly support opportunity research, audience growth, content production, sales, financial operations, compliance and platform reliability.
 
 ## Selected divisions
 
@@ -15,7 +15,7 @@ AURA's objective is to identify and build multiple lawful revenue streams with z
 - Content & Audience: Content Creator, TikTok Strategist, Instagram Curator, Video Optimization Specialist, SEO Specialist, Reddit Community Builder.
 - Sales & Monetization: Offer & Lead Gen Strategist, Outbound Strategist, Sales Outreach, Proposal Strategist.
 - Operations & Finance: Finance Tracker, Analytics Reporter, Legal Compliance Checker.
-- Technology & Automation: AI Engineer, DevOps Automator, Model QA Specialist.
+- Technology & Automation: AI Engineer, DevOps Automator, Model QA Specialist, IT Service Manager, Site Reliability Engineer, Incident Response Commander and Test Automation Engineer.
 
 Canonical upstream role paths and the responsibility of each role are recorded in `skills/registry.yaml` and `docs/agent-registry.md`.
 
@@ -40,3 +40,7 @@ Canonical upstream role paths and the responsibility of each role are recorded i
 ## License and attribution
 
 The upstream LICENSE is MIT and names AgentLand Contributors, copyright 2025. This implementation links to the original role files and uses concise original summaries rather than redistributing the full files. Any future substantial copied text must retain the upstream copyright and permission notice.
+
+## Autonomous IT / AI operations mandate
+
+The Technology & Automation division has continuous responsibility for keeping AURA operational and improving it. It monitors CI, runtime errors, health endpoints, security/dependency alerts, task execution and configuration drift; triages and repairs bugs without waiting for a new owner prompt; adds regression tests; runs full CI; and verifies/rolls back safe deployments. The team may autonomously perform no-cost, reversible technical maintenance within existing credentials and quotas. Any paid API/provider call, paid tool, subscription, ad, purchase or infrastructure spend is blocked until the owner approves the exact cost. Provider quota exhaustion never authorizes paid fallback. Sensitive account/security changes, destructive data operations, data-loss incidents, suspected compromise and irreversible migrations require escalation and containment rather than speculative auto-fix.
