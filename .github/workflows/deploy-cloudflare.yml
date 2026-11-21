@@ -197,6 +197,9 @@ jobs:
       - name: Apply D1 schema
         run: wrangler d1 execute aura-autopilot-db --remote --file=cloudflare/schema.sql
 
+      - name: Apply versioned D1 migrations
+        run: wrangler d1 migrations apply aura-autopilot-db --remote
+
       - name: Initial Worker deployment
         run: uv run pywrangler deploy
 
