@@ -948,6 +948,13 @@ async def invoke_groq_model(env, context: dict) -> tuple[str, str]:
         raise HTTPException(503, "Groq request failed; no paid fallback was attempted")
 
 
+def _should_failover_provider(exc, requested_provider: str, index: int, provider_count: int) -> bool:
+    """Allow automatic failover only for retryable upstream/quota errors."""
+    if requested_provider != "auto" or index >= provider_count - 1:
+        return False
+    return exc.status_code in (429, 502, 503, 504) or _is_quota_exhaustion(exc.detail)
+
+
 def _is_quota_exhaustion(error) -> bool:
     message = str(error).lower()
     markers = ("429", "resource_exhausted", "quota exceeded", "quota_exceeded",
@@ -1157,11 +1164,7 @@ async def execute_agent_task(task_id: str, payload: AgentTaskExecuteIn, request:
         except HTTPException as exc:
             # Fail over only for quota exhaustion or transient upstream failures.
             # Authentication, billing, configuration and invalid-request errors fail closed.
-            retryable = (
-                exc.status_code in (429, 502, 503, 504)
-                or _is_quota_exhaustion(exc.detail)
-            )
-            if payload.provider != "auto" or not retryable or index == len(providers) - 1:
+            if not _should_failover_provider(exc, payload.provider, index, len(providers)):
                 await db.prepare(
                     "UPDATE model_execution_claims SET status = 'failed' WHERE task_id = ?"
                 ).bind(task_id).run()
