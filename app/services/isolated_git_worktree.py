@@ -46,7 +46,7 @@ class IsolatedGitWorktree:
             raise GitWorktreeError("branch name is outside the repair namespace")
         if not isinstance(base_sha, str) or not _SHA1.fullmatch(base_sha):
             raise GitWorktreeError("base commit must be a full lowercase SHA-1")
-        if self.path is not None:
+        if self.path is not None or self.branch is not None:
             raise GitWorktreeError("worktree instance is already in use")
         root = self._run(["git", "rev-parse", "--show-toplevel"], cwd=self.repository)
         if Path(root).resolve() != self.repository:
@@ -112,6 +112,11 @@ class IsolatedGitWorktree:
         if self.path is None:
             return
         path = self.path
+        branch = self.branch
         self._run(["git", "worktree", "remove", "--force", str(path)], cwd=self.repository)
         self.path = None
+        if branch is not None:
+            if not _BRANCH.fullmatch(branch):
+                raise GitWorktreeError("refusing to delete a branch outside the repair namespace")
+            self._run(["git", "branch", "-D", "--", branch], cwd=self.repository)
         self.branch = None
