@@ -239,8 +239,8 @@ CREATE TABLE IF NOT EXISTS model_usage_daily (
 -- One model attempt per task, including failed attempts, to prevent accidental duplicate billing.
 CREATE TABLE IF NOT EXISTS model_execution_claims (
     task_id TEXT PRIMARY KEY,
-    provider TEXT NOT NULL CHECK(provider IN ('cloudflare','groq')),
-    status TEXT NOT NULL CHECK(status IN ('started','completed')),
+    provider TEXT NOT NULL CHECK(provider IN ('cloudflare','groq','gemini')),
+    status TEXT NOT NULL CHECK(status IN ('started','completed','failed')),
     artifact_id TEXT,
     created_at TEXT NOT NULL,
     FOREIGN KEY(task_id) REFERENCES agent_tasks(id) ON DELETE CASCADE
