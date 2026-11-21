@@ -28,6 +28,41 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'failure' && (github.event.workflow_run.name == 'Deploy AURA to Cloudflare' || github.event.workflow_run.run_attempt >= 2) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Diagnose failed workflow from log signatures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run view "$RUN_ID" --repo "$GH_REPO" --log > /tmp/aura-run.log || true
+          python - <<'PY' > /tmp/aura-diagnosis.md
+          from pathlib import Path
+          log = Path("/tmp/aura-run.log").read_text(errors="replace").lower()
+          rules = [
+              ("dependency_or_security_audit", ("pip-audit", "npm audit", "vulnerability", "audit failed")),
+              ("python_syntax_or_import", ("syntaxerror", "modulenotfounderror", "importerror", "compileall")),
+              ("automated_test_regression", ("assertionerror", "failed (", "test failed", "unittest")),
+              ("frontend_build", ("vite", "rolldown", "npm run build", "build failed")),
+              ("database_schema", ("sqlite", "no such table", "migration", "schema")),
+              ("cloudflare_deployment_or_config", ("wrangler", "workers.dev", "cloudflare", "deploy failed")),
+              ("container_or_runtime", ("docker", "container", "health check")),
+          ]
+          hits = [name for name, tokens in rules if any(token in log for token in tokens)]
+          print("## Automated log-signature triage")
+          print()
+          print("Likely categories: " + (", ".join(hits) if hits else "unknown_or_unclassified"))
+          print()
+          print("This is a heuristic classification, not a confirmed root cause. Review the linked run and failing step.")
+          print()
+          print("## Next action")
+          print("- Reproduce the failure with a deterministic test.")
+          print("- Prepare the smallest isolated patch and regression coverage.")
+          print("- Run the full quality workflow; do not merge or deploy automatically.")
+          PY
+          cat /tmp/aura-diagnosis.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create or reuse an incident ticket
         env:
           GH_TOKEN: ${{ github.token }}
@@ -47,6 +82,7 @@ jobs:
             echo "Incident already tracked in issue #$EXISTING"
             exit 0
           fi
+          DIAGNOSIS="$(gh run view "$RUN_ID" --repo "$GH_REPO" --log 2>/dev/null | python -c 'import sys; t=sys.stdin.read().lower(); rules={"dependency_or_security_audit":["pip-audit","npm audit","vulnerability"],"python_syntax_or_import":["syntaxerror","modulenotfounderror","compileall"],"automated_test_regression":["assertionerror","failed (","test failed"],"frontend_build":["vite","rolldown","npm run build"],"database_schema":["sqlite","no such table","migration"],"cloudflare_deployment_or_config":["wrangler","cloudflare","deploy failed"],"container_or_runtime":["docker","container","health check"]}; hits=[k for k,v in rules.items() if any(x in t for x in v)]; print(", ".join(hits) if hits else "unknown_or_unclassified")' || echo unknown_or_unclassified)"
           BODY="$(cat <<EOF
           ## Automated operational incident
 
@@ -57,6 +93,9 @@ jobs:
           - Branch: $HEAD_BRANCH
           - Commit: $HEAD_SHA
           - Conclusion: $CONCLUSION
+          - Heuristic diagnosis: $DIAGNOSIS
+
+          Diagnosis is only a log-signature hint, not a confirmed root cause.
 
           ## Required response
           1. Inspect the failing job and logs.

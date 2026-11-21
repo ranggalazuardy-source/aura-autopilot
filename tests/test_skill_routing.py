@@ -229,6 +229,22 @@ class SkillRoutingTests(unittest.TestCase):
         self.assertIn("pywrangler deploy", workflow)
         self.assertIn("/office/state", workflow)
 
+    def test_safe_self_healing_contract_keeps_release_and_spend_owner_gated(self):
+        contract = (ROOT / "docs" / "SAFE_SELF_HEALING_CODE_AGENT.md").read_text(encoding="utf-8")
+        self.assertIn("create isolated branches", contract)
+        self.assertIn("draft pull request", contract)
+        self.assertIn("must not autonomously", contract)
+        self.assertIn("Merge to `main`", contract)
+        self.assertIn("does not yet have an approved autonomous code-generation runtime", contract)
+
+    def test_incident_intake_adds_heuristic_diagnosis_without_auto_release(self):
+        workflow = (ROOT / ".github" / "workflows" / "incident-intake.yml").read_text(encoding="utf-8")
+        self.assertIn("Diagnose failed workflow from log signatures", workflow)
+        self.assertIn("unknown_or_unclassified", workflow)
+        self.assertIn("This is a heuristic classification", workflow)
+        self.assertIn("do not merge or deploy automatically", workflow)
+        self.assertIn("rerun-failed-jobs", workflow)
+
     def test_task_claim_recovers_orphaned_and_expired_leases(self):
         self.assertIn("NOT EXISTS", self.source)
         self.assertIn("orphan_cutoff", self.source)
