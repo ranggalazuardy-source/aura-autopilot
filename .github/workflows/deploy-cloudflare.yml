@@ -2,6 +2,15 @@ name: Deploy AURA to Cloudflare
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_production_deploy:
+        description: 'Type yes to authorize this production deployment run.'
+        required: true
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
 
 permissions:
   contents: read
@@ -12,6 +21,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_production_deploy == 'yes'
     name: Provision, migrate and deploy AURA
     runs-on: ubuntu-latest
     timeout-minutes: 35
