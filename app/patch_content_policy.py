@@ -3,9 +3,13 @@
 This is a validation-only stage. It never applies patches or writes to disk.
 """
 
+import re
 from collections.abc import Iterable
 
 from app.patch_policy import ChangedFile, PatchDecision, evaluate_patch
+
+
+_HUNK_HEADER = re.compile(r"^@@ -\\d+(?:,\\d+)? \\+\\d+(?:,\\d+)? @@(?: .*)?$")
 
 
 def evaluate_unified_diff(
@@ -38,7 +42,7 @@ def evaluate_unified_diff(
     if len(blocks) != len(items):
         reasons.append("file_count_mismatch")
 
-    metadata_by_path = {item.filename.replace("\\", "/"): item for item in items}
+    metadata_by_path = {item.filename.replace("\\\\", "/"): item for item in items}
     seen: set[str] = set()
 
     for block in blocks:
@@ -54,7 +58,7 @@ def evaluate_unified_diff(
         if old_path != new_path:
             reasons.append("path_change_not_allowed")
             continue
-        path = new_path.replace("\\", "/")
+        path = new_path.replace("\\\\", "/")
         if path in seen:
             reasons.append("duplicate_diff_file")
         seen.add(path)
@@ -85,11 +89,8 @@ def evaluate_unified_diff(
             if line.startswith("@@"):
                 hunk_seen = True
                 in_hunk = True
-                if not line.startswith("@@ -") or " +" not in line or not line.endswith(" @@"):
+                if not _HUNK_HEADER.match(line):
                     reasons.append(f"malformed_hunk_header:{path}")
-                continue
-            if line.startswith(("--- ", "+++ ")) or line.startswith("\\"):
-                in_hunk = False
                 continue
             if not in_hunk:
                 continue
@@ -99,10 +100,8 @@ def evaluate_unified_diff(
                 deletions += 1
             elif line.startswith(" "):
                 continue
-            elif line == "":
-                # Empty context lines in unified diffs are represented by a
-                # leading space; a bare empty line is ambiguous and rejected.
-                reasons.append(f"ambiguous_hunk_line:{path}")
+            elif line.startswith("\\\\"):
+                continue
             else:
                 reasons.append(f"invalid_hunk_line:{path}")
         if not hunk_seen:
