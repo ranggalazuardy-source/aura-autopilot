@@ -1416,6 +1416,19 @@ async def virtual_office_state(request: Request, db=Depends(get_db)):
         FROM audit_log ORDER BY created_at DESC LIMIT 60"""
     ).all()
     logs = d1_rows(log_result)
+    incident_result = await db.prepare(
+        """SELECT id, source, severity, summary, status, occurrence_count, first_seen_at, last_seen_at
+        FROM operational_incidents WHERE status IN ('open','investigating')
+        ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        last_seen_at DESC LIMIT 20"""
+    ).all()
+    open_incidents = d1_rows(incident_result)
+    heartbeat_result = await db.prepare(
+        """SELECT scheduled_at, queued_tasks, in_progress_tasks, blocked_tasks, recovered_leases
+        FROM operational_heartbeats ORDER BY scheduled_at DESC LIMIT 1"""
+    ).all()
+    heartbeat_rows = d1_rows(heartbeat_result)
+    latest_heartbeat = heartbeat_rows[0] if heartbeat_rows else None
     jakarta_tz = timezone(timedelta(hours=7))
     today_jakarta = datetime.now(timezone.utc).astimezone(jakarta_tz).date()
     completed_today = 0
@@ -1449,6 +1462,15 @@ async def virtual_office_state(request: Request, db=Depends(get_db)):
             "provider": provider_adapter_status(get_env(request)),
             "background_scheduler_enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED"),
             "live_financial_execution_enabled": False,
+            "operational_monitor": {
+                "enabled": _truthy_env(get_env(request), "AURA_SCHEDULER_ENABLED"),
+                "mode": "observe_and_safe_recover",
+                "latest_heartbeat": latest_heartbeat,
+                "open_incidents": len(open_incidents),
+                "incident_queue": open_incidents,
+                "automatic_model_repairs": False,
+                "note": "Cron monitor records incidents and reclaims expired task leases. It does not invoke AI models or perform code edits.",
+            },
             "note": "Provider readiness is configuration-only; no live inference or quota test is performed by this status endpoint. A character is marked working only while its D1 task has a valid, unexpired worker lease.",
         },
     }
