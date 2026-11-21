@@ -31,3 +31,7 @@ owner approval receipt bound to its exact base SHA, patch digest, and paths.
 CI uses a deterministic mock generator. Non-mock generators remain blocked
 unless a future owner-authorized runtime explicitly supplies provider inference
 approval. No production route or scheduled trigger invokes this service yet.
+
+
+The regression suite also keeps AST-based route assertions independent of Python's
+quote-style formatting so semantic checks remain stable across interpreter versions.
