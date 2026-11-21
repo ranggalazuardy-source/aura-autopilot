@@ -33,8 +33,8 @@ The adapter must fail closed on unavailable approval storage, stale base commits
 - No AI code-generation provider is called; inference remains disabled.
 - No concrete GitHub/worktree adapter is connected.
 - No patch has been applied to a real repository worktree by this module.
-- The unit tests use fake adapters and prove orchestration order and blocked paths, not live GitHub execution.
-- A failed test run leaves its isolated branch for later inspection; no automatic cleanup is performed.
+- The unit tests use fake adapters and prove orchestration order and blocked paths, not live GitHub execution. Malformed request data and adapter exceptions fail closed; no later stage is called after a failed stage.
+- A failed branch operation, patch application, or test run returns a fail-closed result and never creates a draft PR. A partially created isolated branch is left for inspection; no automatic cleanup is performed.
 - Human review remains mandatory. Draft PR creation is not merge or deployment authorization.
 
 ## Test coverage
