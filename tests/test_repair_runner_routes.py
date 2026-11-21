@@ -12,6 +12,12 @@ class RepairRunnerRouteTests(unittest.TestCase):
         return next(node for node in TREE.body
                     if isinstance(node, ast.AsyncFunctionDef) and node.name == name)
 
+    def test_queue_poll_is_runner_authenticated_and_returns_only_reserved_metadata(self):
+        source = ast.unparse(self.route("dispatch_next_repair_request"))
+        self.assertIn("AURA_REPAIR_RUNNER_SECRET", source)
+        self.assertIn("hmac.compare_digest", source)
+        self.assertIn("dispatch_next_execution_request", source)
+
     def test_patch_retrieval_uses_separate_runner_secret_and_one_time_claim(self):
         source = ast.unparse(self.route("fetch_repair_patch"))
         self.assertIn("AURA_REPAIR_RUNNER_SECRET", source)
@@ -38,7 +44,7 @@ class RepairRunnerRouteTests(unittest.TestCase):
 
     def test_no_runner_route_can_merge_or_deploy(self):
         source = "\n".join(ast.unparse(self.route(name)) for name in (
-            "fetch_repair_patch", "create_repair_execution_request",
+            "dispatch_next_repair_request", "fetch_repair_patch", "create_repair_execution_request",
             "authorize_repair_runner_write",
         )).lower()
         self.assertNotIn("merge_pull_request", source)
