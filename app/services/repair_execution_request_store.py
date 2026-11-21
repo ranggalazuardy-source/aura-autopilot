@@ -10,7 +10,7 @@ import json
 import re
 import secrets
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from app.patch_policy import ChangedFile, evaluate_patch
@@ -19,6 +19,20 @@ _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _INCIDENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _MAX_TTL = 600
+
+
+def _row_mapping(row: Any) -> Mapping[str, Any] | None:
+    if row is None:
+        return None
+    to_py = getattr(row, "to_py", None)
+    if callable(to_py):
+        row = to_py()
+    if isinstance(row, Mapping):
+        return row
+    try:
+        return dict(row)
+    except (TypeError, ValueError):
+        return None
 
 
 def _paths(paths: Sequence[str]) -> tuple[str, ...]:
@@ -84,7 +98,8 @@ async def claim_execution_patch(
         RETURNING id, incident_id, base_sha, patch_sha256, patch_text,
                   approved_paths_json, approval_receipt_id, expires_at"""
     ).bind(now, request_id, now).first()
-    if not result:
+    result = _row_mapping(result)
+    if result is None:
         return None
     patch = result.get("patch_text")
     if not isinstance(patch, str) or hashlib.sha256(patch.encode("utf-8")).hexdigest() != result.get("patch_sha256"):
