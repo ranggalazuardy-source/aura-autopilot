@@ -2,6 +2,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.services.isolated_git_worktree import GitWorktreeError, IsolatedGitWorktree
 
@@ -25,7 +26,7 @@ class IsolatedGitWorktreeTests(unittest.TestCase):
         self.workspace = IsolatedGitWorktree(self.repo, self.root / "worktrees")
 
     def tearDown(self):
-        if self.workspace.path is not None:
+        if self.workspace.path is not None or self.workspace.branch is not None:
             self.workspace.cleanup()
         self.temp.cleanup()
 
@@ -84,6 +85,32 @@ class IsolatedGitWorktreeTests(unittest.TestCase):
             check=True, capture_output=True, text=True,
         ).stdout.strip()
         self.assertEqual(main, "main")
+
+    def test_cleanup_can_retry_branch_deletion_after_worktree_removal(self):
+        branch = "aura/repair/retry-cleanup"
+        path = self.workspace.create(branch, self.base)
+        original_run = self.workspace._run
+        fail_once = {"remaining": True}
+
+        def flaky_run(args, *, cwd, input_text=None):
+            if args[:2] == ["git", "branch"] and fail_once["remaining"]:
+                fail_once["remaining"] = False
+                raise GitWorktreeError("simulated branch deletion failure")
+            return original_run(args, cwd=cwd, input_text=input_text)
+
+        with patch.object(self.workspace, "_run", side_effect=flaky_run):
+            with self.assertRaisesRegex(GitWorktreeError, "simulated"):
+                self.workspace.cleanup()
+        self.assertFalse(path.exists())
+        self.assertIsNone(self.workspace.path)
+        self.assertEqual(self.workspace.branch, branch)
+        self.workspace.cleanup()
+        self.assertIsNone(self.workspace.branch)
+        remaining = subprocess.run(
+            ["git", "branch", "--list", branch], cwd=self.repo,
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(remaining, "")
 
 
 if __name__ == "__main__":
