@@ -33,7 +33,7 @@ function OfficeRoom({ zone }) {
     {[-3.82,3.82].map(dx=><mesh key={"side"+dx} position={[x+dx,0.94,z]} castShadow><boxGeometry args={[0.18,1.65,7]}/><meshStandardMaterial color="#59647a"/></mesh>)}
     <mesh position={[x,0.94,z-3.52]} castShadow><boxGeometry args={[7.8,1.65,0.18]}/><meshStandardMaterial color="#59647a"/></mesh>
     {[-2.35,2.35].map(dx=><mesh key={"door"+dx} position={[x+dx,0.94,z+3.52]} castShadow><boxGeometry args={[3.1,1.65,0.18]}/><meshStandardMaterial color="#59647a"/></mesh>)}
-    {[-2.25,0,2.25].map(dx=>[-1.55,1.55].map(dz=><Desk key={dx+":"+dz} position={[x+dx,0.14,z+dz]} accent={zone.accent} compact/>))}
+    {[-2.25,0,2.25].map(dx=>[-2.25,0,2.25].map(dz=><Desk key={dx+":"+dz} position={[x+dx,0.14,z+dz]} accent={zone.accent} compact/>))}
     <mesh position={[x+2.9,0.38,z-2.55]} castShadow><cylinderGeometry args={[0.38,0.34,0.12,8]}/><meshStandardMaterial color="#806c5d"/></mesh>
     <mesh position={[x+2.9,0.75,z-2.55]} castShadow><sphereGeometry args={[0.25,8,6]}/><meshStandardMaterial color="#4e8d72"/></mesh>
     <Html position={[x,2.1,z-3.1]} center distanceFactor={12} style={{pointerEvents:"none"}}><div className="zone-label" style={{borderColor:zone.accent}}>{zone.title}</div></Html>
@@ -151,9 +151,9 @@ function SceneContents({ agents, selectedAgent, onSelectAgent, controlsRef }) {
       const zone = ZONE_LAYOUT[agent.zone] || ZONE_LAYOUT.command;
       const slot = counts[agent.zone] || 0;
       counts[agent.zone] = slot + 1;
-      const col = slot % 3, row = Math.floor(slot / 3) % 2;
+      const col = slot % 3, row = Math.floor(slot / 3) % 3;
       const dx = (col - 1) * 2.25;
-      const deskZ = zone.center[1] + (row === 0 ? -1.55 : 1.55);
+      const deskZ = zone.center[1] + (-2.25 + row * 2.25);
       const home = [zone.center[0] + dx, 0.16, deskZ + 0.95];
       const work = [zone.center[0] + dx, 0.16, deskZ + 0.72];
       const waiting = [zone.center[0] + (col - 1) * 0.7, 0.16, zone.center[1] + 2.85];
