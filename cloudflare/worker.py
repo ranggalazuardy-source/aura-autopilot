@@ -19,7 +19,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, StrictBool
 from workers import asgi, handler
 from app.services.patch_approval_issuer import issue_patch_approval_receipt
-from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch
+from app.services.repair_execution_request_store import create_execution_request, claim_execution_patch, dispatch_next_execution_request
 from app.services.patch_approval_store import D1PatchApprovalStore
 from app.patch_executor import PatchApproval
 
@@ -2255,6 +2255,25 @@ async def create_repair_execution_request(payload: RepairExecutionRequestIn, req
     await write_audit(db, "patch_execution.request_queued", result["request_id"],
                       f"incident={payload.incident_id}; base={payload.base_sha}; patch={patch_sha}")
     return result
+
+
+@app.post("/repair/runner/next")
+async def dispatch_next_repair_request(request: Request, db=Depends(get_db)):
+    """Runner-authenticated queue poll; reserves one request without returning patch bytes."""
+    env = get_env(request)
+    expected = getattr(env, "AURA_REPAIR_RUNNER_SECRET", None) if env else None
+    supplied = request.headers.get("X-AURA-Runner-Key", "")
+    if not isinstance(expected, str) or not expected:
+        raise HTTPException(503, "Repair runner authentication is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
+        await enforce_auth_failure_rate_limit(request)
+        raise HTTPException(401, "Invalid repair runner credential")
+    item = await dispatch_next_execution_request(db)
+    if item is None:
+        return {"status": "empty"}
+    await write_audit(db, "patch_execution.runner_dispatched", item["request_id"],
+                      f"base={item['base_sha']}; expires_at={item['expires_at']}")
+    return item
 
 
 @app.get("/repair/runner/{request_id}/patch")
