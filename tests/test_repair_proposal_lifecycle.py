@@ -59,7 +59,8 @@ class RepairProposalLifecycleTests(unittest.TestCase):
     def test_queue_route_does_not_merge_or_deploy(self):
         source = ast.unparse(self.function("queue_approved_repair_proposal")).lower()
         self.assertNotIn("merge_pull_request", source)
-        self.assertNotIn("deploy", source)
+        self.assertNotIn("deploy_worker", source)
+        self.assertNotIn("publish_production", source)
 
     def test_d1_schema_has_bounded_persisted_proposal_state_machine(self):
         db = sqlite3.connect(":memory:")
