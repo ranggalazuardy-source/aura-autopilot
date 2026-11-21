@@ -84,6 +84,30 @@ async def create_execution_request(
             "status": "queued"}
 
 
+async def dispatch_next_execution_request(
+    db: Any, *, clock: Callable[[], float] = time.time,
+) -> dict[str, Any] | None:
+    """Atomically reserve the oldest unexpired queued request for a runner."""
+    if db is None:
+        return None
+    now = int(clock())
+    row = await db.prepare(
+        """UPDATE repair_execution_requests
+        SET status = 'dispatched'
+        WHERE id = (
+            SELECT id FROM repair_execution_requests
+            WHERE status = 'queued' AND expires_at > ?
+            ORDER BY created_at ASC LIMIT 1
+        ) AND status = 'queued'
+        RETURNING id, base_sha, expires_at"""
+    ).bind(now).first()
+    row = _row_mapping(row)
+    if row is None:
+        return None
+    return {"request_id": row["id"], "base_sha": row["base_sha"],
+            "expires_at": row["expires_at"], "status": "dispatched"}
+
+
 async def claim_execution_patch(
     db: Any, *, request_id: str, clock: Callable[[], float] = time.time,
 ) -> dict[str, Any] | None:
@@ -94,7 +118,7 @@ async def claim_execution_patch(
     result = await db.prepare(
         """UPDATE repair_execution_requests
         SET status = 'claimed', claimed_at = ?
-        WHERE id = ? AND status = 'queued' AND expires_at > ?
+        WHERE id = ? AND status IN ('queued','dispatched') AND expires_at > ?
         RETURNING id, incident_id, base_sha, patch_sha256, patch_text,
                   approved_paths_json, approval_receipt_id, expires_at"""
     ).bind(now, request_id, now).first()
