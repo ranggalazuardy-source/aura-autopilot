@@ -56,6 +56,22 @@ function ProviderStatus({ provider }) {
   </section>;
 }
 
+function OperationalStatus({ monitor }) {
+  if (!monitor) return null;
+  const incidents = monitor.incident_queue || [];
+  const heartbeat = monitor.latest_heartbeat;
+  return <section className="provider-panel ops-panel">
+    <div className="provider-heading"><div><span className="eyebrow">IT & RELIABILITY</span><h2>Operational control</h2></div><span className={"provider-mode " + (monitor.enabled ? "enabled" : "disabled")}>{monitor.enabled ? "Monitor active" : "Monitor paused"}</span></div>
+    <div className="ops-stats">
+      <article><strong>{incidents.length}</strong><small>Open incidents</small></article>
+      <article><strong>{heartbeat?.queued_tasks ?? "—"}</strong><small>Queued tasks</small></article>
+      <article><strong>{heartbeat?.recovered_leases ?? "—"}</strong><small>Recovered leases</small></article>
+    </div>
+    <p className="provider-footnote">{heartbeat?.scheduled_at ? "Last monitor: " + new Date(heartbeat.scheduled_at).toLocaleString() : "Waiting for first scheduled heartbeat"} · AI auto-repair: {monitor.automatic_model_repairs ? "enabled" : "disabled (guarded)"}</p>
+    {incidents.slice(0,4).map(item => <div className="ops-incident" key={item.id}><span className={"provider-state " + (item.severity === "critical" || item.severity === "high" ? "off" : "ready")}>{item.severity.toUpperCase()}</span><span>{item.summary}</span><small>×{item.occurrence_count}</small></div>)}
+  </section>;
+}
+
 function LoginScreen({ value, onChange, onSubmit, error, loading }) {
   return <main className="connect-page"><div className="connect-card">
     <div className="brand-mark">A</div><p className="eyebrow">AUTONOMOUS UNIFIED REVENUE AGENT</p><h1>Virtual AI Office</h1>
@@ -174,7 +190,7 @@ export default function App() {
       <div className="metric-card"><span>ACTIVE TASKS</span><strong>{summary.active_tasks ?? "—"}</strong><small>Queued · running · blocked</small></div>
       <div className="metric-card"><span>STALE LEASES</span><strong className={summary.stale_leases ? "warning-value" : ""}>{summary.stale_leases ?? "—"}</strong><small>Needs worker recovery</small></div>
     </section>
-    <ProviderStatus provider={data?.runtime?.provider} />
+    <ProviderStatus provider={data?.runtime?.provider} />\n      <OperationalStatus monitor={data?.runtime?.operational_monitor} />
     <section className="office-layout">
       <div className="scene-panel">
         <div className="scene-heading"><div><span className="eyebrow">LIVE FLOOR PLAN</span><h2>Six division rooms · Central meeting room</h2></div><span className="scene-hint">Orbit · Zoom · Select an agent</span></div>
