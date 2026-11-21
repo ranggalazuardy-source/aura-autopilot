@@ -83,6 +83,31 @@ jobs:
       - name: Install Python Worker dependencies
         run: uv sync --all-groups
 
+      - name: Package local AURA modules for the Python Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pywrangler vendors third-party dependencies, but the Worker entrypoint
+          # also imports the repository-local app namespace. Place that source tree
+          # in Python Worker's documented python_modules search path.
+          uv run pywrangler sync
+          mkdir -p python_modules/app
+          cp -a app/. python_modules/app/
+          test -f python_modules/app/services/patch_approval_issuer.py
+          test -f python_modules/app/services/repair_execution_request_store.py
+          test -f python_modules/app/repair_planner.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          source_root = Path("python_modules/app")
+          modules = sorted(source_root.rglob("*.py"))
+          assert modules, "No local AURA Python modules were packaged"
+          for module in modules:
+              ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+          print(f"Packaged and syntax-checked {len(modules)} local AURA modules.")
+          PY
+
       - name: Install and audit Virtual Office dependencies
         run: |
           npm install --prefix virtual-office --no-audit --no-fund
