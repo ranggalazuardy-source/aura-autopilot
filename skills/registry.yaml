@@ -24,7 +24,7 @@ divisions:
     agents: ["Finance Tracker", "Analytics Reporter", "Legal Compliance Checker"]
   technology-automation:
     label: Technology & Automation
-    agents: ["AI Engineer", "DevOps Automator", "Model QA Specialist"]
+    agents: ["AI Engineer", "DevOps Automator", "Model QA Specialist", "IT Service Manager", "Site Reliability Engineer", "Incident Response Commander", "Test Automation Engineer"]
 roles:
   "Agents Orchestrator":
     division: "Executive"
@@ -126,6 +126,27 @@ roles:
     source: "https://github.com/msitarzewski/agency-agents/blob/main/specialized/specialized-model-qa.md"
     specialty: "Tests model outputs, evidence quality, safety and regression behavior."
     skill_packs: ["all packs", "independent QA"]
+
+  "IT Service Manager":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-it-service-manager.md"
+    specialty: "Owns service health, incident queues, operational runbooks, access hygiene and continuity."
+    skill_packs: ["platform-engineering-security"]
+  "Site Reliability Engineer":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-sre.md"
+    specialty: "Monitors SLOs, error budgets, latency, availability and safe self-healing automation."
+    skill_packs: ["platform-engineering-security"]
+  "Incident Response Commander":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/engineering/engineering-incident-response-commander.md"
+    specialty: "Coordinates triage, containment, recovery, postmortems and incident follow-through."
+    skill_packs: ["platform-engineering-security"]
+  "Test Automation Engineer":
+    division: "Technology & Automation"
+    source: "https://github.com/msitarzewski/agency-agents/blob/main/testing/testing-test-automation-engineer.md"
+    specialty: "Builds deterministic regression, integration and end-to-end tests to prevent repeat failures."
+    skill_packs: ["platform-engineering-security"]
 skill_packs:
   market-intelligence:
     file: skills/market-intelligence.md
